@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { MapPin, RefreshCw, DollarSign, Image as ImageIcon } from "lucide-react";
+import { MapPin, RefreshCw, DollarSign, Image as ImageIcon, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { Activity } from "@/types/itinerary";
+import { cn } from "@/lib/utils";
 
 // Category to Hebrew label mapping
 const categoryLabels: Record<string, string> = {
@@ -21,14 +23,24 @@ const imageCache = new Map<string, string>();
 
 interface ActivityCardProps {
   activity: Activity;
+  dayNumber: number;
+  isSwapping?: boolean;
+  onSwap?: (dayNumber: number, activityId: string, activityName: string) => Promise<unknown>;
 }
 
-export function ActivityCard({ activity }: ActivityCardProps) {
+export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap }: ActivityCardProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   
   const categoryLabel = categoryLabels[activity.category] || activity.category;
+
+  // Reset image state when activity changes
+  useEffect(() => {
+    setImageUrl(null);
+    setImageLoaded(false);
+    setImageError(false);
+  }, [activity.id]);
 
   useEffect(() => {
     const fetchImage = async () => {
@@ -47,13 +59,9 @@ export function ActivityCard({ activity }: ActivityCardProps) {
       }
 
       try {
-        console.log('Fetching Unsplash image for:', searchTerm);
-        
         const { data, error } = await supabase.functions.invoke('unsplash-image', {
           body: { query: searchTerm },
         });
-
-        console.log('Unsplash response:', { data, error });
 
         if (error) {
           console.error('Error fetching Unsplash image:', error);
@@ -64,13 +72,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
         if (data?.imageUrl) {
           imageCache.set(searchTerm, data.imageUrl);
           setImageUrl(data.imageUrl);
-          
-          // Log if we got a placeholder
-          if (data.placeholder) {
-            console.warn('Got placeholder image for:', searchTerm, 'Reason:', data.error);
-          }
         } else {
-          console.error('No imageUrl in response:', data);
           setImageError(true);
         }
       } catch (err) {
@@ -80,18 +82,52 @@ export function ActivityCard({ activity }: ActivityCardProps) {
     };
 
     fetchImage();
-  }, [activity.image_search_term, activity.name]);
+  }, [activity.image_search_term, activity.name, activity.id]);
+
+  const handleSwap = async () => {
+    if (!onSwap) return;
+    
+    try {
+      await onSwap(dayNumber, activity.id, activity.name);
+      toast.success("הפעילות הוחלפה בהצלחה!");
+    } catch (err) {
+      toast.error("שגיאה בהחלפת הפעילות");
+    }
+  };
 
   return (
-    <div className="relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-all duration-200 hover:border-blue-200 dark:hover:border-blue-800">
+    <div 
+      className={cn(
+        "relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 transition-all duration-300",
+        isSwapping 
+          ? "opacity-50 pointer-events-none" 
+          : "hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800"
+      )}
+    >
       {/* כפתור החלפה */}
       <Button
         variant="ghost"
         size="icon"
-        className="absolute top-2 left-2 h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+        className="absolute top-2 left-2 h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 z-10"
+        onClick={handleSwap}
+        disabled={isSwapping || !onSwap}
       >
-        <RefreshCw className="h-4 w-4" />
+        {isSwapping ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <RefreshCw className="h-4 w-4" />
+        )}
       </Button>
+
+      {/* Loading overlay */}
+      {isSwapping && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-800/50 rounded-xl z-5">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <span className="text-sm text-slate-600 dark:text-slate-400">מחפש חלופה...</span>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-4">
         {/* תמונה מ-Unsplash */}
@@ -109,7 +145,10 @@ export function ActivityCard({ activity }: ActivityCardProps) {
               <img
                 src={imageUrl}
                 alt={activity.name}
-                className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                className={cn(
+                  "w-full h-full object-cover transition-opacity duration-300",
+                  imageLoaded ? 'opacity-100' : 'opacity-0'
+                )}
                 onLoad={() => setImageLoaded(true)}
                 onError={() => setImageError(true)}
               />

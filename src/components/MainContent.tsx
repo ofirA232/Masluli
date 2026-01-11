@@ -29,9 +29,18 @@ interface MainContentProps {
   isLoading: boolean;
   error: string | null;
   onReset: () => void;
+  swappingActivityId?: string | null;
+  onSwapActivity?: (dayNumber: number, activityId: string, activityName: string) => Promise<unknown>;
 }
 
-export function MainContent({ itinerary, isLoading, error, onReset }: MainContentProps) {
+export function MainContent({ 
+  itinerary, 
+  isLoading, 
+  error, 
+  onReset,
+  swappingActivityId,
+  onSwapActivity,
+}: MainContentProps) {
   const showWelcome = !itinerary && !isLoading;
   const numberOfDays = itinerary?.days?.length || 0;
 
@@ -177,7 +186,12 @@ export function MainContent({ itinerary, isLoading, error, onReset }: MainConten
                             <div className="absolute -start-[25px] top-8 w-4 h-0.5 bg-blue-100 dark:bg-border" />
                             <div className="absolute -start-[29px] top-7 w-3 h-3 rounded-full bg-blue-100 dark:bg-primary/20 border-2 border-blue-400 dark:border-primary" />
                             
-                            <ActivityCard activity={activity} />
+                            <ActivityCard 
+                              activity={activity} 
+                              dayNumber={day.day_number}
+                              isSwapping={swappingActivityId === activity.id}
+                              onSwap={onSwapActivity}
+                            />
                           </div>
                         ))}
                       </div>
