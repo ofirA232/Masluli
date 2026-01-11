@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
     console.log("Searching Unsplash for:", query);
 
-    const unsplashUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=squarish`;
+    const unsplashUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`;
 
     const response = await fetch(unsplashUrl, {
       headers: {
@@ -103,9 +103,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const imageUrl = data.results[0].urls.small;
-    const photographer = data.results[0].user.name;
-    const photographerUrl = data.results[0].user.links.html;
+    // Use urls.regular as per Unsplash API docs
+    const imageUrl = data.results[0].urls.regular;
+    const photographer = data.results[0].user?.name || "Unknown";
+    const photographerUrl = data.results[0].user?.links?.html || "https://unsplash.com";
 
     console.log("Success! Found image:", imageUrl);
 
