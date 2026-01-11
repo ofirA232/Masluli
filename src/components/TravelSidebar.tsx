@@ -214,24 +214,42 @@ export function TravelSidebar({ onGenerate, isLoading, user, onSignOut }: Travel
         </div>
 
         {/* כפתור יצירת תוכנית */}
-        <Button 
-          className="w-full mt-4" 
-          size="lg" 
-          onClick={handleSubmit}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="ms-2 h-4 w-4 animate-spin" />
-              יוצר מסלול...
-            </>
-          ) : (
-            <>
-              <Plane className="ms-2 h-4 w-4" />
-              תכנן את הטיול שלי
-            </>
-          )}
-        </Button>
+        {user ? (
+          <Button 
+            className="w-full mt-4" 
+            size="lg" 
+            onClick={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="ms-2 h-4 w-4 animate-spin" />
+                יוצר מסלול...
+              </>
+            ) : (
+              <>
+                <Plane className="ms-2 h-4 w-4" />
+                תכנן את הטיול שלי
+              </>
+            )}
+          </Button>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 text-center">
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                יש להתחבר כדי ליצור מסלול טיול
+              </p>
+            </div>
+            <Button 
+              className="w-full" 
+              size="lg" 
+              onClick={() => navigate("/auth")}
+            >
+              <LogIn className="ms-2 h-4 w-4" />
+              התחבר כדי להתחיל
+            </Button>
+          </div>
+        )}
       </div>
     </aside>
   );
