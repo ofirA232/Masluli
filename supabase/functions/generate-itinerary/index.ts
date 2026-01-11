@@ -30,6 +30,111 @@ interface ItineraryRequest {
   interests?: string[];
 }
 
+// Validation constants
+const MAX_DESTINATION_LENGTH = 100;
+const MAX_BUDGET_LENGTH = 50;
+const MAX_INTEREST_LENGTH = 50;
+const MAX_INTERESTS_COUNT = 10;
+const MAX_TRAVELERS = 20;
+const MIN_TRAVELERS = 1;
+const MAX_TRIP_DAYS = 30;
+
+// Input validation helper
+function validateRequest(data: unknown): { valid: true; data: ItineraryRequest } | { valid: false; error: string } {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, error: 'Invalid request body' };
+  }
+
+  const req = data as Record<string, unknown>;
+
+  // Validate destination
+  if (typeof req.destination !== 'string' || req.destination.trim().length === 0) {
+    return { valid: false, error: 'Destination is required' };
+  }
+  if (req.destination.length > MAX_DESTINATION_LENGTH) {
+    return { valid: false, error: `Destination must be ${MAX_DESTINATION_LENGTH} characters or less` };
+  }
+
+  // Validate startDate
+  if (typeof req.startDate !== 'string' || !req.startDate) {
+    return { valid: false, error: 'Start date is required' };
+  }
+  const startDate = new Date(req.startDate);
+  if (isNaN(startDate.getTime())) {
+    return { valid: false, error: 'Invalid start date format' };
+  }
+
+  // Validate endDate
+  if (typeof req.endDate !== 'string' || !req.endDate) {
+    return { valid: false, error: 'End date is required' };
+  }
+  const endDate = new Date(req.endDate);
+  if (isNaN(endDate.getTime())) {
+    return { valid: false, error: 'Invalid end date format' };
+  }
+
+  // Validate date range
+  if (endDate < startDate) {
+    return { valid: false, error: 'End date must be after start date' };
+  }
+  
+  const tripDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  if (tripDays > MAX_TRIP_DAYS) {
+    return { valid: false, error: `Trip cannot exceed ${MAX_TRIP_DAYS} days` };
+  }
+
+  // Validate travelers
+  if (typeof req.travelers !== 'number' || !Number.isInteger(req.travelers)) {
+    return { valid: false, error: 'Travelers must be a whole number' };
+  }
+  if (req.travelers < MIN_TRAVELERS || req.travelers > MAX_TRAVELERS) {
+    return { valid: false, error: `Travelers must be between ${MIN_TRAVELERS} and ${MAX_TRAVELERS}` };
+  }
+
+  // Validate budget (optional)
+  if (req.budget !== undefined && req.budget !== null) {
+    if (typeof req.budget !== 'string') {
+      return { valid: false, error: 'Budget must be a string' };
+    }
+    if (req.budget.length > MAX_BUDGET_LENGTH) {
+      return { valid: false, error: `Budget must be ${MAX_BUDGET_LENGTH} characters or less` };
+    }
+  }
+
+  // Validate interests (optional)
+  if (req.interests !== undefined && req.interests !== null) {
+    if (!Array.isArray(req.interests)) {
+      return { valid: false, error: 'Interests must be an array' };
+    }
+    if (req.interests.length > MAX_INTERESTS_COUNT) {
+      return { valid: false, error: `Maximum ${MAX_INTERESTS_COUNT} interests allowed` };
+    }
+    for (const interest of req.interests) {
+      if (typeof interest !== 'string') {
+        return { valid: false, error: 'Each interest must be a string' };
+      }
+      if (interest.length > MAX_INTEREST_LENGTH) {
+        return { valid: false, error: `Each interest must be ${MAX_INTEREST_LENGTH} characters or less` };
+      }
+    }
+  }
+
+  // Sanitize strings for AI prompt injection
+  const sanitize = (str: string) => str.replace(/[<>{}]/g, '').trim();
+
+  return {
+    valid: true,
+    data: {
+      destination: sanitize(req.destination as string),
+      startDate: req.startDate as string,
+      endDate: req.endDate as string,
+      travelers: req.travelers as number,
+      budget: req.budget ? sanitize(req.budget as string) : undefined,
+      interests: req.interests ? (req.interests as string[]).map(sanitize) : undefined,
+    },
+  };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -42,8 +147,26 @@ Deno.serve(async (req) => {
       throw new Error('OPENROUTER_API_KEY is not configured');
     }
 
-    const requestData: ItineraryRequest = await req.json();
-    const { destination, startDate, endDate, travelers, budget, interests } = requestData;
+    // Parse and validate request data
+    let rawData: unknown;
+    try {
+      rawData = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const validation = validateRequest(rawData);
+    if (!validation.valid) {
+      return new Response(
+        JSON.stringify({ error: validation.error }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { destination, startDate, endDate, travelers, budget, interests } = validation.data;
 
     // Calculate number of days
     const start = new Date(startDate);
@@ -73,8 +196,6 @@ ${interests && interests.length > 0 ? `Interests: ${interests.join(', ')}` : ''}
 
 Please provide a detailed day-by-day itinerary with specific activities, times, and locations.`;
 
-    console.log('Sending request to OpenRouter with model: google/gemini-2.5-flash-lite');
-
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -96,7 +217,7 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
     // Handle specific error codes with user-friendly messages
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error:', response.status, errorText);
+      console.error('OpenRouter API error:', response.status);
       
       if (response.status === 429) {
         return new Response(
@@ -112,17 +233,15 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
         );
       }
       
-      throw new Error(`OpenRouter API error: ${response.status}`);
+      throw new Error(`AI service error`);
     }
 
     const data = await response.json();
-    console.log('OpenRouter response received');
 
     const content = data.choices?.[0]?.message?.content;
-    console.log('Raw AI response content:', content?.substring(0, 500));
     
     if (!content) {
-      console.error('No content in response. Full data:', JSON.stringify(data));
+      console.error('No content in AI response');
       throw new Error('No content in response');
     }
 
@@ -145,10 +264,9 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
         jsonString = jsonString.substring(jsonStart, jsonEnd + 1);
       }
       
-      console.log('Sanitized JSON (first 300 chars):', jsonString.substring(0, 300));
       itinerary = JSON.parse(jsonString);
     } catch (parseError) {
-      console.error('Failed to parse itinerary JSON. Raw content:', content);
+      console.error('Failed to parse itinerary JSON');
       throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
     }
 
@@ -157,7 +275,7 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
     });
 
   } catch (error) {
-    console.error('Error generating itinerary:', error);
+    console.error('Error generating itinerary:', error instanceof Error ? error.message : 'Unknown error');
     const errorMessage = error instanceof Error ? error.message : 'Failed to generate itinerary';
     return new Response(
       JSON.stringify({ error: errorMessage }),
