@@ -60,7 +60,7 @@ export function TravelSidebar() {
               placeholder="לאן נוסעים?"
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
-              className="pe-10 bg-background border-input text-right"
+              className="ps-10 bg-background border-input"
             />
           </div>
         </div>
