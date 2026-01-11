@@ -1,4 +1,5 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,50 @@ const TRAVEL_PLACEHOLDER = "https://images.unsplash.com/photo-1488646953014-85cb
 // Validation constants
 const MAX_QUERY_LENGTH = 100;
 const MIN_QUERY_LENGTH = 1;
+
+// Helper to verify JWT authentication
+async function verifyAuth(req: Request): Promise<{ authenticated: true; userId: string } | { authenticated: false; response: Response }> {
+  const authHeader = req.headers.get('Authorization');
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return {
+      authenticated: false,
+      response: new Response(
+        JSON.stringify({ 
+          imageUrl: TRAVEL_PLACEHOLDER, 
+          placeholder: true,
+          error: 'Authentication required' 
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+    };
+  }
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data, error } = await supabase.auth.getUser(token);
+  
+  if (error || !data?.user) {
+    return {
+      authenticated: false,
+      response: new Response(
+        JSON.stringify({ 
+          imageUrl: TRAVEL_PLACEHOLDER, 
+          placeholder: true,
+          error: 'Invalid session' 
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+    };
+  }
+
+  return { authenticated: true, userId: data.user.id };
+}
 
 // Sanitize query for safe API usage
 function sanitizeQuery(query: string): string {
@@ -42,6 +87,12 @@ Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Verify authentication
+  const authResult = await verifyAuth(req);
+  if (!authResult.authenticated) {
+    return authResult.response;
   }
 
   try {
