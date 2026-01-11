@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Users, Calendar, Plane } from "lucide-react";
+import { MapPin, Users, Calendar, Plane, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { DatePickerWithRange } from "@/components/DateRangePicker";
 import { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import type { ItineraryRequest } from "@/types/itinerary";
 
 const interests = [
   { id: "history", label: "היסטוריה", emoji: "🏛️" },
@@ -19,7 +21,12 @@ const interests = [
   { id: "relaxation", label: "רוגע", emoji: "🧘" },
 ];
 
-export function TravelSidebar() {
+interface TravelSidebarProps {
+  onGenerate: (request: ItineraryRequest) => Promise<void>;
+  isLoading: boolean;
+}
+
+export function TravelSidebar({ onGenerate, isLoading }: TravelSidebarProps) {
   const [destination, setDestination] = useState("");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [travelers, setTravelers] = useState(1);
@@ -33,6 +40,33 @@ export function TravelSidebar() {
 
   const handleTravelersChange = (delta: number) => {
     setTravelers((prev) => Math.max(1, Math.min(10, prev + delta)));
+  };
+
+  const handleSubmit = async () => {
+    if (!destination.trim()) {
+      toast.error("נא להזין יעד");
+      return;
+    }
+
+    if (!dateRange?.from || !dateRange?.to) {
+      toast.error("נא לבחור תאריכים");
+      return;
+    }
+
+    const request: ItineraryRequest = {
+      destination: destination.trim(),
+      startDate: dateRange.from.toISOString(),
+      endDate: dateRange.to.toISOString(),
+      travelers,
+      interests: selectedInterests.length > 0 ? selectedInterests : undefined,
+    };
+
+    try {
+      await onGenerate(request);
+      toast.success("המסלול נוצר בהצלחה!");
+    } catch (err) {
+      toast.error("שגיאה ביצירת המסלול, נסה שוב");
+    }
   };
 
   return (
@@ -61,6 +95,7 @@ export function TravelSidebar() {
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
               className="ps-10 bg-background border-input"
+              disabled={isLoading}
             />
           </div>
         </div>
@@ -86,7 +121,7 @@ export function TravelSidebar() {
               size="icon"
               className="h-8 w-8 shrink-0"
               onClick={() => handleTravelersChange(1)}
-              disabled={travelers >= 10}
+              disabled={travelers >= 10 || isLoading}
             >
               +
             </Button>
@@ -101,7 +136,7 @@ export function TravelSidebar() {
               size="icon"
               className="h-8 w-8 shrink-0"
               onClick={() => handleTravelersChange(-1)}
-              disabled={travelers <= 1}
+              disabled={travelers <= 1 || isLoading}
             >
               −
             </Button>
@@ -120,9 +155,10 @@ export function TravelSidebar() {
                   "cursor-pointer transition-all duration-200 hover:scale-105 py-1.5 px-3",
                   selectedInterests.includes(interest.id)
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                    : "bg-background hover:bg-accent hover:text-accent-foreground"
+                    : "bg-background hover:bg-accent hover:text-accent-foreground",
+                  isLoading && "opacity-50 pointer-events-none"
                 )}
-                onClick={() => toggleInterest(interest.id)}
+                onClick={() => !isLoading && toggleInterest(interest.id)}
               >
                 <span className="ms-1">{interest.emoji}</span>
                 {interest.label}
@@ -132,9 +168,23 @@ export function TravelSidebar() {
         </div>
 
         {/* כפתור יצירת תוכנית */}
-        <Button className="w-full mt-4" size="lg">
-          <Plane className="ms-2 h-4 w-4" />
-          תכנן את הטיול שלי
+        <Button 
+          className="w-full mt-4" 
+          size="lg" 
+          onClick={handleSubmit}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="ms-2 h-4 w-4 animate-spin" />
+              יוצר מסלול...
+            </>
+          ) : (
+            <>
+              <Plane className="ms-2 h-4 w-4" />
+              תכנן את הטיול שלי
+            </>
+          )}
         </Button>
       </div>
     </aside>
