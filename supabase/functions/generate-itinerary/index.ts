@@ -51,38 +51,21 @@ serve(async (req) => {
     const end = new Date(endDate);
     const numberOfDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    const systemPrompt = `You are an expert travel assistant. Generate a detailed itinerary in JSON format. 
-For each activity, provide a short 'image_search_term' (e.g., 'Colosseum Rome') so the frontend can fetch a real photo.
+    const systemPrompt = `You are a JSON generator. You must return ONLY valid JSON with no markdown formatting or backticks. Do not include any explanations, text before, or text after the JSON.
 
-IMPORTANT: Your response must be ONLY valid JSON, no additional text or markdown. Follow this exact structure:
-{
-  "days": [
-    {
-      "day_number": 1,
-      "activities": [
-        {
-          "id": "unique-id-1",
-          "name": "Activity Name",
-          "description": "Brief description of the activity",
-          "price": "₪100-150 / Free / Included",
-          "address": "Full address of the location",
-          "time": "09:00-11:00",
-          "category": "attraction|restaurant|transport|accommodation|shopping|entertainment",
-          "image_search_term": "search term for photo"
-        }
-      ]
-    }
-  ]
-}
+You are an expert travel assistant creating detailed itineraries.
 
-Guidelines:
-- Generate ${numberOfDays} days of activities
+Return this exact JSON structure:
+{"days":[{"day_number":1,"activities":[{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo"}]}]}
+
+Rules:
+- Generate exactly ${numberOfDays} days
 - Include 4-6 activities per day
-- Mix different categories: attractions, restaurants, entertainment
-- Consider travel time between locations
-- Be specific with addresses and times
-- Prices should be in Israeli Shekels (₪)
-- image_search_term should be specific and descriptive for finding relevant photos`;
+- category must be one of: attraction, restaurant, transport, accommodation, shopping, entertainment
+- Prices in Israeli Shekels (₪)
+- image_search_term should be specific (e.g., "Colosseum Rome sunset")
+- Mix different categories throughout each day
+- Consider realistic travel times between locations`;
 
     const userPrompt = `Create a ${numberOfDays}-day travel itinerary for ${destination}.
 Number of travelers: ${travelers}
@@ -91,7 +74,7 @@ ${interests && interests.length > 0 ? `Interests: ${interests.join(', ')}` : ''}
 
 Please provide a detailed day-by-day itinerary with specific activities, times, and locations.`;
 
-    console.log('Sending request to OpenRouter with model: google/gemini-1.5-flash');
+    console.log('Sending request to OpenRouter with model: google/gemini-2.5-flash-preview-05-20');
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -102,10 +85,9 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
         'X-Title': 'Trip Planner App',
       },
       body: JSON.stringify({
-        model: 'google/gemini-1.5-flash',
+        model: 'google/gemini-2.5-flash-preview-05-20',
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+          { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
         ],
         temperature: 0.7,
         max_tokens: 4000,
@@ -138,20 +120,37 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
     console.log('OpenRouter response received');
 
     const content = data.choices?.[0]?.message?.content;
+    console.log('Raw AI response content:', content?.substring(0, 500));
+    
     if (!content) {
+      console.error('No content in response. Full data:', JSON.stringify(data));
       throw new Error('No content in response');
     }
 
-    // Parse the JSON from the response
+    // Parse the JSON from the response - sanitize markdown code blocks
     let itinerary: { days: Day[] };
     try {
-      // Try to extract JSON if it's wrapped in markdown code blocks
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const jsonString = jsonMatch ? jsonMatch[1].trim() : content.trim();
+      // Strip markdown code blocks if present
+      let jsonString = content.trim();
+      
+      // Remove ```json or ``` wrappers
+      const jsonMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        jsonString = jsonMatch[1].trim();
+      }
+      
+      // Remove any leading/trailing non-JSON characters
+      const jsonStart = jsonString.indexOf('{');
+      const jsonEnd = jsonString.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        jsonString = jsonString.substring(jsonStart, jsonEnd + 1);
+      }
+      
+      console.log('Sanitized JSON (first 300 chars):', jsonString.substring(0, 300));
       itinerary = JSON.parse(jsonString);
     } catch (parseError) {
-      console.error('Failed to parse itinerary JSON:', content);
-      throw new Error('Failed to parse itinerary response');
+      console.error('Failed to parse itinerary JSON. Raw content:', content);
+      throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
     }
 
     return new Response(JSON.stringify(itinerary), {
