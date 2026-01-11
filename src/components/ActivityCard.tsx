@@ -58,6 +58,14 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap }
         return;
       }
 
+      // Check if user is authenticated before making the API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Not authenticated, use placeholder
+        setImageError(true);
+        return;
+      }
+
       try {
         const { data, error } = await supabase.functions.invoke('unsplash-image', {
           body: { query: searchTerm },

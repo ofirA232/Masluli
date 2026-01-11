@@ -13,6 +13,12 @@ function getTimeSlot(time: string): string {
   return 'Evening';
 }
 
+// Helper to check if user is authenticated
+async function checkAuth(): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return !!session;
+}
+
 // Helper to fetch image for an activity
 async function fetchActivityImage(searchTerm: string): Promise<string | null> {
   if (!searchTerm) return null;
@@ -20,6 +26,12 @@ async function fetchActivityImage(searchTerm: string): Promise<string | null> {
   // Check cache first
   if (imageCache.has(searchTerm)) {
     return imageCache.get(searchTerm)!;
+  }
+
+  // Check auth before making request
+  const isAuthenticated = await checkAuth();
+  if (!isAuthenticated) {
+    return null;
   }
 
   try {
@@ -46,6 +58,13 @@ export function useGenerateItinerary() {
   const [swappingActivityId, setSwappingActivityId] = useState<string | null>(null);
 
   const generateItinerary = async (request: ItineraryRequest) => {
+    // Check auth before making request
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      setError('יש להתחבר כדי ליצור מסלול טיול');
+      throw new Error('יש להתחבר כדי ליצור מסלול טיול');
+    }
+
     setIsLoading(true);
     setError(null);
     setLastRequest(request);
@@ -56,6 +75,10 @@ export function useGenerateItinerary() {
       });
 
       if (fnError) {
+        // Handle auth errors specifically
+        if (fnError.message?.includes('401') || fnError.message?.includes('JWT')) {
+          throw new Error('יש להתחבר מחדש כדי להמשיך');
+        }
         throw new Error(fnError.message || 'Failed to generate itinerary');
       }
 
@@ -84,6 +107,12 @@ export function useGenerateItinerary() {
       return;
     }
 
+    // Check auth before making request
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      throw new Error('יש להתחבר מחדש כדי להמשיך');
+    }
+
     // Find the activity to get its time
     const day = itinerary.days.find(d => d.day_number === dayNumber);
     const activity = day?.activities.find(a => a.id === activityId);
@@ -108,6 +137,10 @@ export function useGenerateItinerary() {
       });
 
       if (fnError) {
+        // Handle auth errors specifically
+        if (fnError.message?.includes('401') || fnError.message?.includes('JWT')) {
+          throw new Error('יש להתחבר מחדש כדי להמשיך');
+        }
         throw new Error(fnError.message || 'Failed to swap activity');
       }
 
