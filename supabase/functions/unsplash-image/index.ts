@@ -5,6 +5,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Placeholder image when no results or API fails
+const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&h=400&fit=crop";
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -13,21 +16,39 @@ Deno.serve(async (req) => {
 
   try {
     const unsplashAccessKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
+    
+    // If no API key, return placeholder
     if (!unsplashAccessKey) {
-      console.error("UNSPLASH_ACCESS_KEY is not set");
+      console.warn("UNSPLASH_ACCESS_KEY is not set, using placeholder");
       return new Response(
-        JSON.stringify({ error: "Unsplash API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ imageUrl: PLACEHOLDER_IMAGE, placeholder: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const url = new URL(req.url);
-    const query = url.searchParams.get("query");
-
+    // Get query from POST body or GET params
+    let query: string | null = null;
+    
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        query = body.query;
+      } catch {
+        // If body parsing fails, try URL params
+      }
+    }
+    
+    // Fallback to URL params
     if (!query) {
+      const url = new URL(req.url);
+      query = url.searchParams.get("query");
+    }
+
+    if (!query || query.trim() === "") {
+      console.warn("No query provided, using placeholder");
       return new Response(
-        JSON.stringify({ error: "Query parameter is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ imageUrl: PLACEHOLDER_IMAGE, placeholder: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -45,16 +66,10 @@ Deno.serve(async (req) => {
       const errorText = await response.text();
       console.error("Unsplash API error:", response.status, errorText);
       
-      if (response.status === 403) {
-        return new Response(
-          JSON.stringify({ error: "Unsplash API rate limit exceeded" }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
+      // Return placeholder on any error
       return new Response(
-        JSON.stringify({ error: "Failed to fetch image from Unsplash" }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ imageUrl: PLACEHOLDER_IMAGE, placeholder: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -63,7 +78,7 @@ Deno.serve(async (req) => {
     if (!data.results || data.results.length === 0) {
       console.log("No results found for query:", query);
       return new Response(
-        JSON.stringify({ imageUrl: null }),
+        JSON.stringify({ imageUrl: PLACEHOLDER_IMAGE, placeholder: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -78,15 +93,16 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         imageUrl, 
         photographer, 
-        photographerUrl 
+        photographerUrl,
+        placeholder: false
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("Error in unsplash-image function:", error);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ imageUrl: PLACEHOLDER_IMAGE, placeholder: true }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
