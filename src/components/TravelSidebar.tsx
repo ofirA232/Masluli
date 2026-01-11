@@ -36,7 +36,7 @@ export function TravelSidebar() {
   };
 
   return (
-    <aside className="fixed right-0 top-0 h-screen w-80 bg-sidebar border-s border-sidebar-border p-6 overflow-y-auto">
+    <aside className="w-80 shrink-0 bg-sidebar border-s border-sidebar-border p-6 overflow-y-auto">
       <div className="flex items-center gap-3 mb-8">
         <div className="p-2 bg-primary rounded-xl">
           <Plane className="h-6 w-6 text-primary-foreground" />
