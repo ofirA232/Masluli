@@ -21,7 +21,7 @@ const features = [
 
 export function MainContent() {
   return (
-    <main className="me-80 min-h-screen bg-background p-8">
+    <main className="flex-1 min-h-screen bg-background p-8 overflow-y-auto">
       <div className="max-w-4xl mx-auto">
         {/* אזור כותרת */}
         <div className="text-center mb-12 pt-8">

@@ -3,9 +3,9 @@ import { MainContent } from "@/components/MainContent";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <TravelSidebar />
+    <div className="flex min-h-screen bg-background">
       <MainContent />
+      <TravelSidebar />
     </div>
   );
 };
