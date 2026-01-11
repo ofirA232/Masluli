@@ -47,9 +47,13 @@ export function ActivityCard({ activity }: ActivityCardProps) {
       }
 
       try {
+        console.log('Fetching Unsplash image for:', searchTerm);
+        
         const { data, error } = await supabase.functions.invoke('unsplash-image', {
           body: { query: searchTerm },
         });
+
+        console.log('Unsplash response:', { data, error });
 
         if (error) {
           console.error('Error fetching Unsplash image:', error);
@@ -60,7 +64,13 @@ export function ActivityCard({ activity }: ActivityCardProps) {
         if (data?.imageUrl) {
           imageCache.set(searchTerm, data.imageUrl);
           setImageUrl(data.imageUrl);
+          
+          // Log if we got a placeholder
+          if (data.placeholder) {
+            console.warn('Got placeholder image for:', searchTerm, 'Reason:', data.error);
+          }
         } else {
+          console.error('No imageUrl in response:', data);
           setImageError(true);
         }
       } catch (err) {
