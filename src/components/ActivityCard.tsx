@@ -1,15 +1,10 @@
-import { useState } from "react";
-import { Clock, MapPin, RefreshCw, DollarSign, Image as ImageIcon } from "lucide-react";
+import { useState, useEffect } from "react";
+import { MapPin, RefreshCw, DollarSign, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
 import type { Activity } from "@/types/itinerary";
-
-// Unsplash source URL for free images
-const getUnsplashUrl = (searchTerm: string, width = 200, height = 200) => {
-  const query = encodeURIComponent(searchTerm);
-  return `https://source.unsplash.com/${width}x${height}/?${query}`;
-};
 
 // Category to Hebrew label mapping
 const categoryLabels: Record<string, string> = {
@@ -21,16 +16,69 @@ const categoryLabels: Record<string, string> = {
   entertainment: "בידור",
 };
 
+// Simple in-memory cache for images
+const imageCache = new Map<string, string>();
+
 interface ActivityCardProps {
   activity: Activity;
 }
 
 export function ActivityCard({ activity }: ActivityCardProps) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   
-  const imageUrl = getUnsplashUrl(activity.image_search_term, 200, 200);
   const categoryLabel = categoryLabels[activity.category] || activity.category;
+
+  useEffect(() => {
+    const fetchImage = async () => {
+      const searchTerm = activity.image_search_term;
+      
+      // Check cache first
+      if (imageCache.has(searchTerm)) {
+        setImageUrl(imageCache.get(searchTerm)!);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.functions.invoke('unsplash-image', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: null,
+        });
+
+        // Use query params instead
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL || 'https://jcvmzavzhpbujnidxgux.supabase.co'}/functions/v1/unsplash-image?query=${encodeURIComponent(searchTerm)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impjdm16YXZ6aHBidWpuaWR4Z3V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0NTg0MDEsImV4cCI6MjA2NTAzNDQwMX0.YMJzlxKEoIlK05mFKyB8SAYQvqAqZLHVLDmwJydfQdw'}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.imageUrl) {
+            imageCache.set(searchTerm, result.imageUrl);
+            setImageUrl(result.imageUrl);
+          } else {
+            setImageError(true);
+          }
+        } else {
+          console.error('Failed to fetch Unsplash image');
+          setImageError(true);
+        }
+      } catch (err) {
+        console.error('Error fetching image:', err);
+        setImageError(true);
+      }
+    };
+
+    fetchImage();
+  }, [activity.image_search_term]);
 
   return (
     <div className="relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-all duration-200 hover:border-blue-200 dark:hover:border-blue-800">
@@ -46,22 +94,25 @@ export function ActivityCard({ activity }: ActivityCardProps) {
       <div className="flex gap-4">
         {/* תמונה מ-Unsplash */}
         <div className="w-24 h-24 rounded-lg overflow-hidden shrink-0 border border-slate-100 dark:border-slate-700">
-          {!imageLoaded && !imageError && (
+          {!imageUrl && !imageError && (
             <Skeleton className="w-full h-full" />
           )}
-          {imageError ? (
+          {imageError || (!imageUrl && imageError) ? (
             <div className="w-full h-full bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-900/30 dark:to-slate-800 flex items-center justify-center">
               <ImageIcon className="h-8 w-8 text-blue-300 dark:text-blue-600" />
             </div>
-          ) : (
-            <img
-              src={imageUrl}
-              alt={activity.name}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
-            />
-          )}
+          ) : imageUrl ? (
+            <>
+              {!imageLoaded && <Skeleton className="w-full h-full absolute" />}
+              <img
+                src={imageUrl}
+                alt={activity.name}
+                className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageError(true)}
+              />
+            </>
+          ) : null}
         </div>
 
         {/* תוכן */}
