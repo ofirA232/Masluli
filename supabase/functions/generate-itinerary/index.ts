@@ -74,7 +74,7 @@ ${interests && interests.length > 0 ? `Interests: ${interests.join(', ')}` : ''}
 
 Please provide a detailed day-by-day itinerary with specific activities, times, and locations.`;
 
-    console.log('Sending request to OpenRouter with model: google/gemini-2.5-flash-preview-05-20');
+    console.log('Sending request to OpenRouter with model: google/gemini-2.5-flash-lite');
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -85,7 +85,7 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
         'X-Title': 'Trip Planner App',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview-05-20',
+        model: 'google/gemini-2.5-flash-lite',
         messages: [
           { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
         ],
