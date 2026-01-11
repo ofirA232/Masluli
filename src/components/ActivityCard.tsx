@@ -32,7 +32,13 @@ export function ActivityCard({ activity }: ActivityCardProps) {
 
   useEffect(() => {
     const fetchImage = async () => {
-      const searchTerm = activity.image_search_term;
+      // Use image_search_term or fallback to activity name
+      const searchTerm = activity.image_search_term?.trim() || activity.name?.trim();
+      
+      if (!searchTerm) {
+        setImageError(true);
+        return;
+      }
       
       // Check cache first
       if (imageCache.has(searchTerm)) {
@@ -42,33 +48,19 @@ export function ActivityCard({ activity }: ActivityCardProps) {
 
       try {
         const { data, error } = await supabase.functions.invoke('unsplash-image', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: null,
+          body: { query: searchTerm },
         });
 
-        // Use query params instead
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL || 'https://jcvmzavzhpbujnidxgux.supabase.co'}/functions/v1/unsplash-image?query=${encodeURIComponent(searchTerm)}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impjdm16YXZ6aHBidWpuaWR4Z3V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0NTg0MDEsImV4cCI6MjA2NTAzNDQwMX0.YMJzlxKEoIlK05mFKyB8SAYQvqAqZLHVLDmwJydfQdw'}`,
-            },
-          }
-        );
+        if (error) {
+          console.error('Error fetching Unsplash image:', error);
+          setImageError(true);
+          return;
+        }
 
-        if (response.ok) {
-          const result = await response.json();
-          if (result.imageUrl) {
-            imageCache.set(searchTerm, result.imageUrl);
-            setImageUrl(result.imageUrl);
-          } else {
-            setImageError(true);
-          }
+        if (data?.imageUrl) {
+          imageCache.set(searchTerm, data.imageUrl);
+          setImageUrl(data.imageUrl);
         } else {
-          console.error('Failed to fetch Unsplash image');
           setImageError(true);
         }
       } catch (err) {
@@ -78,7 +70,7 @@ export function ActivityCard({ activity }: ActivityCardProps) {
     };
 
     fetchImage();
-  }, [activity.image_search_term]);
+  }, [activity.image_search_term, activity.name]);
 
   return (
     <div className="relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-all duration-200 hover:border-blue-200 dark:hover:border-blue-800">
