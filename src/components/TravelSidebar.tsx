@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { MapPin, Users, Calendar, Plane, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { MapPin, Users, Calendar, Plane, Loader2, LogIn, LogOut, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { DatePickerWithRange } from "@/components/DateRangePicker";
 import { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { ItineraryRequest } from "@/types/itinerary";
+import type { User as AuthUser } from "@supabase/supabase-js";
 
 const interests = [
   { id: "history", label: "היסטוריה", emoji: "🏛️" },
@@ -24,9 +27,12 @@ const interests = [
 interface TravelSidebarProps {
   onGenerate: (request: ItineraryRequest) => Promise<void>;
   isLoading: boolean;
+  user: AuthUser | null;
+  onSignOut: () => Promise<void>;
 }
 
-export function TravelSidebar({ onGenerate, isLoading }: TravelSidebarProps) {
+export function TravelSidebar({ onGenerate, isLoading, user, onSignOut }: TravelSidebarProps) {
+  const navigate = useNavigate();
   const [destination, setDestination] = useState("");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [travelers, setTravelers] = useState(1);
@@ -69,8 +75,48 @@ export function TravelSidebar({ onGenerate, isLoading }: TravelSidebarProps) {
     }
   };
 
+  const handleSignOut = async () => {
+    await onSignOut();
+    toast.success("התנתקת בהצלחה");
+  };
+
   return (
-    <aside className="w-80 shrink-0 bg-sidebar border-s border-sidebar-border p-6 overflow-y-auto">
+    <aside className="w-80 shrink-0 bg-sidebar border-s border-sidebar-border p-6 overflow-y-auto flex flex-col">
+      {/* User Section */}
+      <div className="mb-4">
+        {user ? (
+          <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1.5 bg-green-500 rounded-full shrink-0">
+                <User className="h-3 w-3 text-white" />
+              </div>
+              <span className="text-sm text-green-700 dark:text-green-400 truncate" dir="ltr">
+                {user.email}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-green-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
+              onClick={handleSignOut}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2"
+            onClick={() => navigate("/auth")}
+          >
+            <LogIn className="h-4 w-4" />
+            התחבר / הירשם
+          </Button>
+        )}
+      </div>
+
+      <Separator className="mb-6" />
+
       <div className="flex items-center gap-3 mb-8">
         <div className="p-2 bg-primary rounded-xl">
           <Plane className="h-6 w-6 text-primary-foreground" />
@@ -81,7 +127,7 @@ export function TravelSidebar({ onGenerate, isLoading }: TravelSidebarProps) {
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-6 flex-1">
         {/* יעד */}
         <div className="space-y-2">
           <Label htmlFor="destination" className="text-sidebar-foreground font-medium">
