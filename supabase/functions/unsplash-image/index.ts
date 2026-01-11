@@ -8,6 +8,36 @@ const corsHeaders = {
 // Travel-related placeholder when no results found
 const TRAVEL_PLACEHOLDER = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&h=400&fit=crop";
 
+// Validation constants
+const MAX_QUERY_LENGTH = 100;
+const MIN_QUERY_LENGTH = 1;
+
+// Sanitize query for safe API usage
+function sanitizeQuery(query: string): string {
+  return query
+    .replace(/[<>{}]/g, '') // Remove potentially harmful characters
+    .trim()
+    .substring(0, MAX_QUERY_LENGTH); // Enforce max length
+}
+
+// Validate query parameter
+function validateQuery(query: unknown): { valid: true; query: string } | { valid: false; error: string } {
+  if (typeof query !== 'string') {
+    return { valid: false, error: 'Query must be a string' };
+  }
+  
+  const trimmed = query.trim();
+  if (trimmed.length < MIN_QUERY_LENGTH) {
+    return { valid: false, error: 'Query cannot be empty' };
+  }
+  
+  if (trimmed.length > MAX_QUERY_LENGTH) {
+    return { valid: false, error: `Query must be ${MAX_QUERY_LENGTH} characters or less` };
+  }
+  
+  return { valid: true, query: sanitizeQuery(trimmed) };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -23,7 +53,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ 
           imageUrl: TRAVEL_PLACEHOLDER, 
           placeholder: true,
-          error: "API key not configured" 
+          error: "Service temporarily unavailable" 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -31,39 +61,33 @@ Deno.serve(async (req) => {
 
     // Universal input handling: Try URL params first, then request body
     const url = new URL(req.url);
-    let query = url.searchParams.get("query");
+    let rawQuery: unknown = url.searchParams.get("query");
     
     // If not in URL params, try request body
-    if (!query) {
+    if (!rawQuery) {
       try {
         const body = await req.json();
-        query = body?.query;
+        rawQuery = body?.query;
       } catch {
         // Body parsing failed, query stays null
       }
     }
 
-    // Trim and validate
-    query = query?.trim() || "";
-
-    console.log("=== Unsplash Image Request ===");
-    console.log("Method:", req.method);
-    console.log("Query from params:", url.searchParams.get("query"));
-    console.log("Final query:", query);
-
-    if (!query) {
-      console.error("No query provided - returning placeholder");
+    // Validate the query
+    const validation = validateQuery(rawQuery);
+    
+    if (!validation.valid) {
       return new Response(
         JSON.stringify({ 
           imageUrl: TRAVEL_PLACEHOLDER, 
           placeholder: true,
-          error: "No search query provided" 
+          error: validation.error 
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("Searching Unsplash for:", query);
+    const query = validation.query;
 
     const unsplashUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`;
 
@@ -73,26 +97,21 @@ Deno.serve(async (req) => {
       },
     });
 
-    console.log("Unsplash API response status:", response.status);
-
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Unsplash API error:", response.status, errorText);
+      console.error("Unsplash API error:", response.status);
       return new Response(
         JSON.stringify({ 
           imageUrl: TRAVEL_PLACEHOLDER, 
           placeholder: true,
-          error: `Unsplash API error: ${response.status}` 
+          error: "Image service temporarily unavailable" 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const data = await response.json();
-    console.log("Unsplash results count:", data.results?.length || 0);
     
     if (!data.results || data.results.length === 0) {
-      console.log("No results found for query:", query);
       return new Response(
         JSON.stringify({ 
           imageUrl: TRAVEL_PLACEHOLDER, 
@@ -108,8 +127,6 @@ Deno.serve(async (req) => {
     const photographer = data.results[0].user?.name || "Unknown";
     const photographerUrl = data.results[0].user?.links?.html || "https://unsplash.com";
 
-    console.log("Success! Found image:", imageUrl);
-
     return new Response(
       JSON.stringify({ 
         imageUrl, 
@@ -121,12 +138,12 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Unexpected error in unsplash-image function:", error);
+    console.error("Unexpected error in unsplash-image function:", error instanceof Error ? error.message : 'Unknown error');
     return new Response(
       JSON.stringify({ 
         imageUrl: TRAVEL_PLACEHOLDER, 
         placeholder: true,
-        error: String(error) 
+        error: "Service temporarily unavailable" 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
