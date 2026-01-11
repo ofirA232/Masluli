@@ -91,7 +91,7 @@ ${interests && interests.length > 0 ? `Interests: ${interests.join(', ')}` : ''}
 
 Please provide a detailed day-by-day itinerary with specific activities, times, and locations.`;
 
-    console.log('Sending request to OpenRouter with model: google/gemini-2.0-flash-exp:free');
+    console.log('Sending request to OpenRouter with model: google/gemini-1.5-flash');
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -102,7 +102,7 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
         'X-Title': 'Trip Planner App',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
+        model: 'google/gemini-1.5-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -112,10 +112,26 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       }),
     });
 
+    // Handle specific error codes with user-friendly messages
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error:', errorText);
-      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      console.error('OpenRouter API error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'שרתי ה-AI עמוסים כרגע, נסה שוב בעוד מספר שניות' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (response.status >= 500) {
+        return new Response(
+          JSON.stringify({ error: 'שגיאה בשרת ה-AI, נסה שוב מאוחר יותר' }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      throw new Error(`OpenRouter API error: ${response.status}`);
     }
 
     const data = await response.json();
