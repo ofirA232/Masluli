@@ -4,37 +4,37 @@ import { Card, CardContent } from "@/components/ui/card";
 const features = [
   {
     icon: Compass,
-    title: "Smart Itineraries",
-    description: "AI-powered trip planning tailored to your interests",
+    title: "מסלולים חכמים",
+    description: "תכנון טיולים מונחה בינה מלאכותית המותאם לתחומי העניין שלך",
   },
   {
     icon: Map,
-    title: "Local Insights",
-    description: "Discover hidden gems recommended by locals",
+    title: "טיפים מקומיים",
+    description: "גלה פנינים נסתרות שמומלצות על ידי מקומיים",
   },
   {
     icon: Sparkles,
-    title: "Personalized",
-    description: "Every trip is uniquely crafted for you",
+    title: "מותאם אישית",
+    description: "כל טיול מעוצב במיוחד עבורך",
   },
 ];
 
 export function MainContent() {
   return (
-    <main className="ml-80 min-h-screen bg-background p-8">
+    <main className="me-80 min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto">
-        {/* Hero Section */}
+        {/* אזור כותרת */}
         <div className="text-center mb-12 pt-8">
           <h2 className="text-4xl font-bold text-foreground mb-4">
-            Where will your next adventure take you?
+            לאן ההרפתקה הבאה שלך תיקח אותך?
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Fill in your trip details and let us craft the perfect itinerary 
-            based on your interests and travel style.
+            מלא את פרטי הטיול שלך ותן לנו ליצור עבורך את המסלול המושלם
+            בהתבסס על תחומי העניין וסגנון הנסיעה שלך.
           </p>
         </div>
 
-        {/* Feature Cards */}
+        {/* כרטיסי תכונות */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           {features.map((feature) => (
             <Card key={feature.title} className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-border bg-card">
@@ -53,18 +53,18 @@ export function MainContent() {
           ))}
         </div>
 
-        {/* Placeholder for Generated Itinerary */}
+        {/* מקום לתוכנית הטיול שתיווצר */}
         <Card className="border-dashed border-2 border-border bg-muted/30">
           <CardContent className="py-16 text-center">
             <div className="p-4 bg-muted rounded-full w-fit mx-auto mb-4">
               <Map className="h-8 w-8 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-medium text-foreground mb-2">
-              Your Itinerary Will Appear Here
+              תוכנית הטיול שלך תופיע כאן
             </h3>
             <p className="text-muted-foreground text-sm max-w-md mx-auto">
-              Complete the form on the left and click "Plan My Trip" to generate 
-              your personalized travel itinerary.
+              מלא את הטופס בצד ימין ולחץ על "תכנן את הטיול שלי" כדי ליצור
+              את תוכנית הטיול המותאמת אישית שלך.
             </p>
           </CardContent>
         </Card>
