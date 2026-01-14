@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { MapPin, Users, Calendar, Plane, Loader2, LogIn, LogOut, User } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { MapPin, Users, Calendar, Plane, Loader2, LogIn, LogOut, User, FolderOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -85,22 +85,35 @@ export function TravelSidebar({ onGenerate, isLoading, user, onSignOut }: Travel
       {/* User Section */}
       <div className="mb-4">
         {user ? (
-          <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="p-1.5 bg-green-500 rounded-full shrink-0">
-                <User className="h-3 w-3 text-white" />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1.5 bg-green-500 rounded-full shrink-0">
+                  <User className="h-3 w-3 text-white" />
+                </div>
+                <span className="text-sm text-green-700 dark:text-green-400 truncate" dir="ltr">
+                  {user.email}
+                </span>
               </div>
-              <span className="text-sm text-green-700 dark:text-green-400 truncate" dir="ltr">
-                {user.email}
-              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-green-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
+                onClick={handleSignOut}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
+            {/* My Trips Link */}
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-green-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
-              onClick={handleSignOut}
+              variant="outline"
+              className="w-full justify-start gap-2"
+              asChild
             >
-              <LogOut className="h-4 w-4" />
+              <Link to="/my-trips">
+                <FolderOpen className="h-4 w-4" />
+                הטיולים שלי
+              </Link>
             </Button>
           </div>
         ) : (
