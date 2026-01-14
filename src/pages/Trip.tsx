@@ -29,6 +29,15 @@ const Trip = () => {
       }
 
       try {
+        // Get the current user - trips are now owner-scoped
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          setError("יש להתחבר כדי לצפות בטיול");
+          setLoading(false);
+          return;
+        }
+
         const { data, error: fetchError } = await supabase
           .from("trips")
           .select("*")
@@ -37,7 +46,12 @@ const Trip = () => {
 
         if (fetchError) {
           logger.error("Error fetching trip:", fetchError);
-          setError("לא נמצא טיול עם המזהה הזה");
+          // Could be RLS blocking access or trip doesn't exist
+          if (fetchError.code === 'PGRST116') {
+            setError("טיול זה לא נמצא או שאין לך הרשאה לצפות בו");
+          } else {
+            setError("לא נמצא טיול עם המזהה הזה");
+          }
           return;
         }
 
