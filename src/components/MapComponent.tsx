@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import { Map, Marker, Overlay } from "pigeon-maps";
 
 interface Activity {
@@ -13,6 +14,24 @@ interface MapComponentProps {
 }
 
 const MapComponent = ({ activities }: MapComponentProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(400);
+
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        const newHeight = containerRef.current.clientHeight;
+        if (newHeight > 0) {
+          setHeight(newHeight);
+        }
+      }
+    };
+
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    return () => window.removeEventListener("resize", updateHeight);
+  }, []);
+
   // Default center (Tel Aviv) or the first activity's location
   const defaultCenter: [number, number] = [32.0853, 34.7818];
 
@@ -36,30 +55,36 @@ const MapComponent = ({ activities }: MapComponentProps) => {
   if (validActivities.length === 0) return null;
 
   return (
-    <Map defaultCenter={center} defaultZoom={13} height={400}>
-      {validActivities.map((activity) => (
-        <Marker
-          key={activity.id}
-          anchor={[activity.coordinates!.lat, activity.coordinates!.lng]}
-          width={40}
-        />
-      ))}
+    <div ref={containerRef} className="w-full h-full min-h-[400px]">
+      <Map 
+        defaultCenter={center} 
+        defaultZoom={13} 
+        height={height}
+      >
+        {validActivities.map((activity) => (
+          <Marker
+            key={activity.id}
+            anchor={[activity.coordinates!.lat, activity.coordinates!.lng]}
+            width={40}
+          />
+        ))}
 
-      {validActivities.map((activity) => (
-        <Overlay
-          key={`overlay-${activity.id}`}
-          anchor={[activity.coordinates!.lat, activity.coordinates!.lng]}
-          offset={[60, 10]}
-        >
-          <div
-            dir="rtl"
-            className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2 py-1 rounded shadow text-xs max-w-[150px] truncate"
+        {validActivities.map((activity) => (
+          <Overlay
+            key={`overlay-${activity.id}`}
+            anchor={[activity.coordinates!.lat, activity.coordinates!.lng]}
+            offset={[60, 10]}
           >
-            {activity.name}
-          </div>
-        </Overlay>
-      ))}
-    </Map>
+            <div
+              dir="rtl"
+              className="bg-card text-card-foreground px-2 py-1 rounded shadow text-xs max-w-[150px] truncate"
+            >
+              {activity.name}
+            </div>
+          </Overlay>
+        ))}
+      </Map>
+    </div>
   );
 };
 
