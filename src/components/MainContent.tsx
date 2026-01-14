@@ -56,6 +56,7 @@ export function MainContent({
 }: MainContentProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [highlightedActivityId, setHighlightedActivityId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [showMapOnMobile, setShowMapOnMobile] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -65,6 +66,10 @@ export function MainContent({
 
   const handleActivityHover = useCallback((activityId: string | null) => {
     setHighlightedActivityId(activityId);
+  }, []);
+
+  const handleActivitySelect = useCallback((activityId: string) => {
+    setSelectedActivityId(prev => prev === activityId ? null : activityId);
   }, []);
 
   const handleActivityClick = useCallback((activityId: string) => {
@@ -373,6 +378,8 @@ export function MainContent({
                                     dayNumber={day.day_number}
                                     isSwapping={swappingActivityId === activity.id}
                                     onSwap={onSwapActivity}
+                                    isSelected={selectedActivityId === activity.id}
+                                    onClick={() => handleActivitySelect(activity.id)}
                                   />
                                 </div>
                               ))}
@@ -396,7 +403,7 @@ export function MainContent({
                 >
                   <div className="h-full p-4">
                     <div className="h-full rounded-xl overflow-hidden shadow-lg">
-                      <MapComponent activities={mapActivities} />
+                      <MapComponent activities={mapActivities} selectedActivityId={selectedActivityId} />
                     </div>
                   </div>
                 </div>
