@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Compass, Map as MapIcon, Sparkles, RotateCcw, Loader2, Save, MapPin, List } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActivityCard, ActivityCardSkeleton } from "@/components/ActivityCard";
-import { ItineraryMap } from "@/components/ItineraryMap";
+import MapComponent from "@/components/MapComponent";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
@@ -136,10 +136,23 @@ export function MainContent({
     }
   };
 
+  const mapActivities = useMemo(() => {
+    if (!itinerary?.days) return [];
+    return itinerary.days.flatMap((day) =>
+      (day.activities || [])
+        .filter((a) => typeof a.coordinates?.lat === "number" && typeof a.coordinates?.lng === "number")
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          coordinates: a.coordinates,
+          dayNumber: day.day_number,
+          time: a.time,
+        }))
+    );
+  }, [itinerary]);
+
   // Check if we have activities with coordinates for showing the map
-  const hasCoordinates = itinerary?.days?.some(day => 
-    day.activities?.some(activity => activity.coordinates?.lat && activity.coordinates?.lng)
-  );
+  const hasCoordinates = mapActivities.length > 0;
 
   return (
     <main className="flex-1 min-h-screen bg-slate-50 dark:bg-background overflow-hidden">
@@ -373,12 +386,7 @@ export function MainContent({
               )}
             >
               <div className="h-full min-h-[400px] lg:min-h-0 rounded-lg overflow-hidden shadow-lg">
-                <ItineraryMap
-                  itinerary={itinerary}
-                  highlightedActivityId={highlightedActivityId}
-                  onActivityHover={handleActivityHover}
-                  onActivityClick={handleActivityClick}
-                />
+                <MapComponent activities={mapActivities} />
               </div>
             </div>
           )}
