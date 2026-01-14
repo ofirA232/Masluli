@@ -1,10 +1,31 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Allowed origins - restrict to your domains
+const allowedOrigins = [
+  'http://localhost:8080',
+  'http://localhost:3000',
+];
+
+// Add production domains from environment
+const productionOrigins = Deno.env.get('ALLOWED_ORIGINS')?.split(',').filter(Boolean) || [];
+allowedOrigins.push(...productionOrigins);
+
+// Helper to get CORS headers based on request origin
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin') || '';
+  
+  // Check if origin is allowed or if it's a Lovable preview domain
+  const isAllowed = allowedOrigins.includes(origin) || 
+    origin.endsWith('.lovable.app') || 
+    origin.endsWith('.lovableproject.com');
+  
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : '',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
 
 // Travel-related placeholder when no results found
 const TRAVEL_PLACEHOLDER = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&h=400&fit=crop";
@@ -14,7 +35,7 @@ const MAX_QUERY_LENGTH = 100;
 const MIN_QUERY_LENGTH = 1;
 
 // Helper to verify JWT authentication
-async function verifyAuth(req: Request): Promise<{ authenticated: true; userId: string } | { authenticated: false; response: Response }> {
+async function verifyAuth(req: Request, corsHeaders: Record<string, string>): Promise<{ authenticated: true; userId: string } | { authenticated: false; response: Response }> {
   const authHeader = req.headers.get('Authorization');
   
   if (!authHeader?.startsWith('Bearer ')) {
@@ -84,13 +105,15 @@ function validateQuery(query: unknown): { valid: true; query: string } | { valid
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   // Verify authentication
-  const authResult = await verifyAuth(req);
+  const authResult = await verifyAuth(req, corsHeaders);
   if (!authResult.authenticated) {
     return authResult.response;
   }

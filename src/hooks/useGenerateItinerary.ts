@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 import type { Itinerary, ItineraryRequest, Activity } from '@/types/itinerary';
 
 // Simple in-memory cache for images
@@ -103,7 +104,7 @@ export function useGenerateItinerary() {
     activityName: string
   ) => {
     if (!lastRequest || !itinerary) {
-      console.error('Cannot swap: no request or itinerary data');
+      logger.error('Cannot swap: no request or itinerary data');
       return;
     }
 
@@ -117,7 +118,7 @@ export function useGenerateItinerary() {
     const day = itinerary.days.find(d => d.day_number === dayNumber);
     const activity = day?.activities.find(a => a.id === activityId);
     if (!activity) {
-      console.error('Activity not found:', activityId);
+      logger.error('Activity not found:', activityId);
       return;
     }
 
@@ -180,7 +181,7 @@ export function useGenerateItinerary() {
       return newActivity;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'שגיאה בהחלפת הפעילות';
-      console.error('Swap error:', errorMessage);
+      logger.error('Swap error:', errorMessage);
       throw err;
     } finally {
       setSwappingActivityId(null);
