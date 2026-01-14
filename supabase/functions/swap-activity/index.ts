@@ -27,6 +27,11 @@ function getCorsHeaders(req: Request): Record<string, string> {
   };
 }
 
+interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 interface Activity {
   id: string;
   name: string;
@@ -36,6 +41,7 @@ interface Activity {
   time: string;
   category: string;
   image_search_term: string;
+  coordinates: Coordinates;
 }
 
 interface SwapActivityRequest {
@@ -212,7 +218,7 @@ Deno.serve(async (req) => {
 You are an expert travel assistant suggesting alternative activities.
 
 Return this exact JSON structure for a SINGLE activity:
-{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo"}
+{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}
 
 Rules:
 - Generate exactly ONE activity as a replacement
@@ -220,7 +226,8 @@ Rules:
 - Prices in Israeli Shekels (₪)
 - image_search_term should be specific (e.g., "Colosseum Rome sunset")
 - The time should be appropriate for the ${time_slot} time slot
-- The activity must be different from: ${rejected_activity_name}`;
+- The activity must be different from: ${rejected_activity_name}
+- IMPORTANT: Provide accurate GPS coordinates (lat/lng) for the location in ${destination}`;
 
     const userPrompt = `Suggest ONE alternative activity for ${destination} during ${time_slot} (Day ${day_number}).
 ${interests && interests.length > 0 ? `Interests: ${interests.join(', ')}` : ''}

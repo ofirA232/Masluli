@@ -107,3 +107,24 @@ All colors MUST be HSL.
 .font-heebo {
   font-family: 'Heebo', sans-serif;
 }
+
+/* Leaflet map custom styles */
+.leaflet-container {
+  font-family: 'Heebo', sans-serif;
+  direction: ltr;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+  direction: rtl;
+}
+
+.highlighted-marker {
+  filter: hue-rotate(180deg) saturate(1.5);
+  z-index: 1000 !important;
+}
