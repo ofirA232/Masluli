@@ -53,6 +53,20 @@ interface ActivityWithDay extends Activity {
   dayNumber: number;
 }
 
+// Helper to validate coordinates
+function isValidCoordinate(lat: unknown, lng: unknown): boolean {
+  return (
+    typeof lat === 'number' &&
+    typeof lng === 'number' &&
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
 interface MapBoundsUpdaterProps {
   activities: ActivityWithDay[];
 }
@@ -62,10 +76,10 @@ function MapBoundsUpdater({ activities }: MapBoundsUpdaterProps) {
   const map = useMap();
 
   useEffect(() => {
-    if (activities.length === 0) return;
+    if (!activities || activities.length === 0) return;
 
     const validActivities = activities.filter(
-      (a) => a.coordinates?.lat && a.coordinates?.lng
+      (a) => a.coordinates && isValidCoordinate(a.coordinates.lat, a.coordinates.lng)
     );
 
     if (validActivities.length === 0) return;
@@ -89,9 +103,20 @@ interface ActivityMarkerProps {
 
 // Separate component for markers to avoid context issues
 function ActivityMarker({ activity, isHighlighted, onHover, onClick }: ActivityMarkerProps) {
+  // Strict guard - don't render if coordinates are missing or invalid
+  if (
+    !activity ||
+    !activity.coordinates ||
+    !isValidCoordinate(activity.coordinates.lat, activity.coordinates.lng)
+  ) {
+    return null;
+  }
+
+  const { lat, lng } = activity.coordinates;
+
   return (
     <Marker
-      position={[activity.coordinates!.lat, activity.coordinates!.lng]}
+      position={[lat, lng]}
       icon={isHighlighted ? highlightedIcon : defaultIcon}
       eventHandlers={{
         mouseover: () => onHover?.(activity.id),
@@ -105,15 +130,15 @@ function ActivityMarker({ activity, isHighlighted, onHover, onClick }: ActivityM
             className="w-full h-24 rounded-md mb-2 bg-cover bg-center"
             style={{
               backgroundColor: categoryColors[activity.category] || '#6B7280',
-              backgroundImage: `url(https://source.unsplash.com/200x150/?${encodeURIComponent(
-                activity.image_search_term
-              )})`,
+              backgroundImage: activity.image_search_term
+                ? `url(https://source.unsplash.com/200x150/?${encodeURIComponent(activity.image_search_term)})`
+                : undefined,
             }}
           />
-          <h3 className="font-bold text-sm mb-1">{activity.name}</h3>
+          <h3 className="font-bold text-sm mb-1">{activity.name || 'פעילות'}</h3>
           <p className="text-xs text-gray-600 mb-1">יום {activity.dayNumber}</p>
-          <p className="text-xs text-gray-500">{activity.time}</p>
-          <p className="text-xs text-gray-500 mt-1">{activity.address}</p>
+          <p className="text-xs text-gray-500">{activity.time || ''}</p>
+          <p className="text-xs text-gray-500 mt-1">{activity.address || ''}</p>
         </div>
       </Popup>
     </Marker>
@@ -121,7 +146,7 @@ function ActivityMarker({ activity, isHighlighted, onHover, onClick }: ActivityM
 }
 
 interface ItineraryMapProps {
-  itinerary: Itinerary;
+  itinerary: Itinerary | null | undefined;
   highlightedActivityId?: string | null;
   onActivityHover?: (activityId: string | null) => void;
   onActivityClick?: (activityId: string) => void;
@@ -135,36 +160,60 @@ export function ItineraryMap({
 }: ItineraryMapProps) {
   const mapRef = useRef<L.Map | null>(null);
 
-  // Flatten all activities with their day numbers
+  // Flatten all activities with their day numbers - with strict validation
   const allActivities = useMemo<ActivityWithDay[]>(() => {
-    if (!itinerary?.days) return [];
+    if (!itinerary || !itinerary.days || !Array.isArray(itinerary.days)) {
+      return [];
+    }
 
-    return itinerary.days.flatMap((day) =>
-      day.activities
-        .filter((activity) => activity.coordinates?.lat && activity.coordinates?.lng)
+    return itinerary.days.flatMap((day) => {
+      if (!day || !day.activities || !Array.isArray(day.activities)) {
+        return [];
+      }
+      return day.activities
+        .filter(
+          (activity) =>
+            activity &&
+            activity.coordinates &&
+            isValidCoordinate(activity.coordinates.lat, activity.coordinates.lng)
+        )
         .map((activity) => ({
           ...activity,
           dayNumber: day.day_number,
-        }))
-    );
+        }));
+    });
   }, [itinerary]);
 
   // Calculate center point
   const center = useMemo(() => {
-    if (allActivities.length === 0) {
+    if (!allActivities || allActivities.length === 0) {
       return { lat: 32.0853, lng: 34.7818 }; // Default: Tel Aviv
     }
 
-    const sumLat = allActivities.reduce((sum, a) => sum + (a.coordinates?.lat || 0), 0);
-    const sumLng = allActivities.reduce((sum, a) => sum + (a.coordinates?.lng || 0), 0);
+    let sumLat = 0;
+    let sumLng = 0;
+    let count = 0;
+
+    for (const a of allActivities) {
+      if (a.coordinates && isValidCoordinate(a.coordinates.lat, a.coordinates.lng)) {
+        sumLat += a.coordinates.lat;
+        sumLng += a.coordinates.lng;
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      return { lat: 32.0853, lng: 34.7818 };
+    }
 
     return {
-      lat: sumLat / allActivities.length,
-      lng: sumLng / allActivities.length,
+      lat: sumLat / count,
+      lng: sumLng / count,
     };
   }, [allActivities]);
 
-  if (allActivities.length === 0) {
+  // Safety check - don't render map if no valid activities
+  if (!allActivities || allActivities.length === 0) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-muted/30 rounded-lg">
         <p className="text-muted-foreground text-center p-4">
@@ -187,15 +236,19 @@ export function ItineraryMap({
       />
       <MapBoundsUpdater activities={allActivities} />
 
-      {allActivities.map((activity) => (
-        <ActivityMarker
-          key={activity.id}
-          activity={activity}
-          isHighlighted={highlightedActivityId === activity.id}
-          onHover={onActivityHover}
-          onClick={onActivityClick}
-        />
-      ))}
+      {allActivities.map((activity) => {
+        // Extra safety: skip if no valid id
+        if (!activity || !activity.id) return null;
+        return (
+          <ActivityMarker
+            key={activity.id}
+            activity={activity}
+            isHighlighted={highlightedActivityId === activity.id}
+            onHover={onActivityHover}
+            onClick={onActivityClick}
+          />
+        );
+      })}
     </MapContainer>
   );
 }
