@@ -1,90 +1,66 @@
-import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
+import { Map, Marker, Overlay } from "pigeon-maps";
 
-import iconUrl from "leaflet/dist/images/marker-icon.png";
-import iconShadowUrl from "leaflet/dist/images/marker-shadow.png";
-
-type Coordinates = { lat: number; lng: number };
-
-export type MapActivity = {
+interface Activity {
   id: string;
   name: string;
-  coordinates?: Coordinates;
+  coordinates?: { lat: number; lng: number };
   dayNumber?: number;
   time?: string;
-};
+}
 
 interface MapComponentProps {
-  activities?: MapActivity[] | null;
+  activities: Activity[];
 }
 
-function isValidCoordinate(coords: unknown): coords is Coordinates {
-  if (!coords || typeof coords !== "object") return false;
-  const c = coords as Coordinates;
-  return (
-    typeof c.lat === "number" &&
-    typeof c.lng === "number" &&
-    !Number.isNaN(c.lat) &&
-    !Number.isNaN(c.lng) &&
-    c.lat >= -90 &&
-    c.lat <= 90 &&
-    c.lng >= -180 &&
-    c.lng <= 180
-  );
-}
+const MapComponent = ({ activities }: MapComponentProps) => {
+  // Default center (Tel Aviv) or the first activity's location
+  const defaultCenter: [number, number] = [32.0853, 34.7818];
 
-// Fix for default marker icon missing in Vite/Webpack
-const DefaultIcon = L.icon({
-  iconUrl,
-  shadowUrl: iconShadowUrl,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
-L.Marker.prototype.options.icon = DefaultIcon;
-
-export default function MapComponent({ activities }: MapComponentProps) {
-  // Client-side only (prevents React-Leaflet context crashes in some setups)
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  // Defensive props
-  const safeActivities = activities ?? [];
-  const validActivities = safeActivities.filter(
-    (a) => a?.id && isValidCoordinate(a.coordinates)
+  const firstWithCoords = activities?.find(
+    (a) => typeof a.coordinates?.lat === "number" && typeof a.coordinates?.lng === "number"
   );
 
-  if (!mounted) return null;
-  if (validActivities.length === 0) return null;
+  const center: [number, number] = firstWithCoords?.coordinates
+    ? [firstWithCoords.coordinates.lat, firstWithCoords.coordinates.lng]
+    : defaultCenter;
+
+  if (!activities || activities.length === 0) return null;
+
+  const validActivities = activities.filter(
+    (a) =>
+      a?.id &&
+      typeof a.coordinates?.lat === "number" &&
+      typeof a.coordinates?.lng === "number"
+  );
 
   if (validActivities.length === 0) return null;
 
-  // Default to London if no coordinates (docs example)
-  const position: [number, number] = validActivities[0]?.coordinates
-    ? [validActivities[0].coordinates!.lat, validActivities[0].coordinates!.lng]
-    : [51.505, -0.09];
-
   return (
-    <MapContainer center={position} zoom={13} className="h-full w-full rounded-lg">
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-
-      {validActivities.map((a) => (
+    <Map defaultCenter={center} defaultZoom={13} height={400}>
+      {validActivities.map((activity) => (
         <Marker
-          key={a.id}
-          position={[a.coordinates!.lat, a.coordinates!.lng]}
-        >
-          <Popup>
-            <div dir="rtl" className="text-right">
-              <div className="font-semibold">{a.name}</div>
-              {a.dayNumber ? <div className="text-xs">יום {a.dayNumber}</div> : null}
-              {a.time ? <div className="text-xs">{a.time}</div> : null}
-            </div>
-          </Popup>
-        </Marker>
+          key={activity.id}
+          anchor={[activity.coordinates!.lat, activity.coordinates!.lng]}
+          width={40}
+        />
       ))}
-    </MapContainer>
+
+      {validActivities.map((activity) => (
+        <Overlay
+          key={`overlay-${activity.id}`}
+          anchor={[activity.coordinates!.lat, activity.coordinates!.lng]}
+          offset={[60, 10]}
+        >
+          <div
+            dir="rtl"
+            className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2 py-1 rounded shadow text-xs max-w-[150px] truncate"
+          >
+            {activity.name}
+          </div>
+        </Overlay>
+      ))}
+    </Map>
   );
-}
+};
+
+export default MapComponent;
