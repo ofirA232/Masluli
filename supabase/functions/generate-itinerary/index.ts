@@ -199,6 +199,60 @@ function validateRequest(data: unknown): { valid: true; data: ItineraryRequest }
   };
 }
 
+function escapeControlCharsInStrings(input: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === '\\') {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      out += ch;
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      // Raw newlines/tabs inside JSON strings are invalid. Convert them.
+      if (ch === '\n') {
+        out += '\\n';
+        continue;
+      }
+      if (ch === '\r') {
+        // Normalize CRLF -> \n (skip CR)
+        continue;
+      }
+      if (ch === '\t') {
+        out += '\\t';
+        continue;
+      }
+
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) {
+        out += ' ';
+        continue;
+      }
+    }
+
+    out += ch;
+  }
+
+  return out;
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   
@@ -263,7 +317,9 @@ Rules:
 - image_search_term should be specific (e.g., "Colosseum Rome sunset")
 - Mix different categories throughout each day
 - Consider realistic travel times between locations
-- IMPORTANT: For each activity, provide accurate GPS coordinates (lat/lng) for the location. Use real coordinates for the actual addresses.`;
+- IMPORTANT: For each activity, provide accurate GPS coordinates (lat/lng) for the location. Use real coordinates for the actual addresses.
+- CRITICAL JSON RULES: All string values MUST be a single line (no raw newlines). Do NOT include double quotes (") inside any string value.
+- id must be a short lowercase kebab-case slug (no spaces), e.g., "eiffel-tower-visit".`;
     };
 
     const buildUserPrompt = (daysInChunk: number, startDayNumber: number) => {
@@ -288,8 +344,8 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash-lite',
           messages: [{ role: 'user', content: `${systemPromptText}\n\n${userPromptText}` }],
-          temperature: 0.3,
-          max_tokens: 4500,
+          temperature: 0.2,
+          max_tokens: 8000,
         }),
       });
 
@@ -333,7 +389,9 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
           jsonString = jsonString.substring(jsonStart, jsonEnd + 1);
         }
 
-        // Minimal repair for common truncation/trailing comma issues
+        // Repair common JSON issues from LLMs (e.g., raw newlines inside strings, trailing commas)
+        jsonString = escapeControlCharsInStrings(jsonString);
+
         jsonString = jsonString
           .replace(/,\s*([}\]])/g, '$1')
           .replace(/\u0000/g, '');
@@ -376,18 +434,38 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       const chunkLabel = `chunk ${startDay}-${startDay + daysInChunk - 1}`;
 
       const systemPrompt = buildSystemPrompt(daysInChunk, startDay);
-      const userPrompt = buildUserPrompt(daysInChunk, startDay);
+      const baseUserPrompt = buildUserPrompt(daysInChunk, startDay);
 
-      const aiResult = await callAi(systemPrompt, userPrompt);
-      if (!aiResult.ok) {
-        return new Response(JSON.stringify({ error: aiResult.error }), {
-          status: aiResult.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      // Retry once if the model returns invalid JSON
+      let parsed = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const userPrompt =
+          attempt === 1
+            ? baseUserPrompt
+            : `${baseUserPrompt}\n\nCRITICAL: Your previous response was invalid JSON. Return corrected JSON ONLY. Ensure there are no raw newlines inside any string values and no quotes inside strings.`;
+
+        const aiResult = await callAi(systemPrompt, userPrompt);
+        if (!aiResult.ok) {
+          return new Response(JSON.stringify({ error: aiResult.error }), {
+            status: aiResult.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        try {
+          const chunkItinerary = parseItineraryFromContent(aiResult.content, chunkLabel);
+          mergedDays.push(...chunkItinerary.days);
+          parsed = true;
+          break;
+        } catch (e) {
+          console.warn('Chunk JSON parse failed, retrying:', chunkLabel, 'attempt', attempt);
+          if (attempt === 2) throw e;
+        }
       }
 
-      const chunkItinerary = parseItineraryFromContent(aiResult.content, chunkLabel);
-      mergedDays.push(...chunkItinerary.days);
+      if (!parsed) {
+        throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
+      }
     }
 
     mergedDays.sort((a, b) => a.day_number - b.day_number);
