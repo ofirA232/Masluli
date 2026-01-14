@@ -245,15 +245,18 @@ Deno.serve(async (req) => {
     const end = new Date(endDate);
     const numberOfDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    const systemPrompt = `You are a JSON generator. You must return ONLY valid JSON with no markdown formatting or backticks. Do not include any explanations, text before, or text after the JSON.
+    const buildSystemPrompt = (daysInChunk: number, startDayNumber: number) => {
+      const endDayNumber = startDayNumber + daysInChunk - 1;
+      return `You are a JSON generator. You must return ONLY valid JSON with no markdown formatting or backticks. Do not include any explanations, text before, or text after the JSON.
 
 You are an expert travel assistant creating detailed itineraries.
 
 Return this exact JSON structure:
-{"days":[{"day_number":1,"activities":[{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}]}]}
+{"days":[{"day_number":${startDayNumber},"activities":[{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}]}]}
 
 Rules:
-- Generate exactly ${numberOfDays} days
+- Generate exactly ${daysInChunk} days
+- day_number MUST start at ${startDayNumber} and end at ${endDayNumber}
 - Include 4-6 activities per day
 - category must be one of: attraction, restaurant, transport, accommodation, shopping, entertainment
 - Prices in Israeli Shekels (₪)
@@ -261,113 +264,135 @@ Rules:
 - Mix different categories throughout each day
 - Consider realistic travel times between locations
 - IMPORTANT: For each activity, provide accurate GPS coordinates (lat/lng) for the location. Use real coordinates for the actual addresses.`;
+    };
 
-    const userPrompt = `Create a ${numberOfDays}-day travel itinerary for ${destination}.
+    const buildUserPrompt = (daysInChunk: number, startDayNumber: number) => {
+      const endDayNumber = startDayNumber + daysInChunk - 1;
+      return `Create days ${startDayNumber}-${endDayNumber} of a ${numberOfDays}-day travel itinerary for ${destination}.
 Number of travelers: ${travelers}
 ${budget ? `Budget: ${budget}` : ''}
 ${interests && interests.length > 0 ? `Interests: ${interests.join(', ')}` : ''}
 
 Please provide a detailed day-by-day itinerary with specific activities, times, and locations.`;
+    };
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openRouterApiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://lovable.dev',
-        'X-Title': 'Trip Planner App',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        messages: [
-          { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
-        ],
-        temperature: 0.7,
-        max_tokens: 8000,
-      }),
-    });
+    const callAi = async (systemPromptText: string, userPromptText: string) => {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openRouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://lovable.dev',
+          'X-Title': 'Trip Planner App',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [{ role: 'user', content: `${systemPromptText}\n\n${userPromptText}` }],
+          temperature: 0.3,
+          max_tokens: 4500,
+        }),
+      });
 
-    // Handle specific error codes with user-friendly messages
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenRouter API error:', response.status);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'שרתי ה-AI עמוסים כרגע, נסה שוב בעוד מספר שניות' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OpenRouter API error:', response.status, errorText);
+
+        if (response.status === 429) {
+          return { ok: false as const, status: 429 as const, error: 'שרתי ה-AI עמוסים כרגע, נסה שוב בעוד מספר שניות' };
+        }
+
+        if (response.status >= 500) {
+          return { ok: false as const, status: 502 as const, error: 'שגיאה בשרת ה-AI, נסה שוב מאוחר יותר' };
+        }
+
+        return { ok: false as const, status: 502 as const, error: 'שגיאה בשירות ה-AI, נסה שוב' };
       }
-      
-      if (response.status >= 500) {
-        return new Response(
-          JSON.stringify({ error: 'שגיאה בשרת ה-AI, נסה שוב מאוחר יותר' }),
-          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        console.error('No content in AI response');
+        return { ok: false as const, status: 502 as const, error: 'שגיאה בשירות ה-AI, נסה שוב' };
       }
-      
-      throw new Error(`AI service error`);
+
+      return { ok: true as const, content };
+    };
+
+    const parseItineraryFromContent = (content: string, chunkLabel: string): { days: Day[] } => {
+      try {
+        let jsonString = content.trim();
+
+        // Remove ```json or ``` wrappers
+        const jsonMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) jsonString = jsonMatch[1].trim();
+
+        // Remove any leading/trailing non-JSON characters
+        const jsonStart = jsonString.indexOf('{');
+        const jsonEnd = jsonString.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          jsonString = jsonString.substring(jsonStart, jsonEnd + 1);
+        }
+
+        // Minimal repair for common truncation/trailing comma issues
+        jsonString = jsonString
+          .replace(/,\s*([}\]])/g, '$1')
+          .replace(/\u0000/g, '');
+
+        const itinerary = JSON.parse(jsonString) as { days: Day[] };
+
+        if (!itinerary.days || !Array.isArray(itinerary.days)) {
+          console.error('Invalid itinerary structure - missing days array', chunkLabel);
+          throw new Error('Invalid structure');
+        }
+
+        itinerary.days = itinerary.days.map((day) => ({
+          ...day,
+          activities: (day.activities || []).map((activity, idx) => ({
+            ...activity,
+            id: activity.id || `day${day.day_number}-activity${idx}-${Date.now()}`,
+            coordinates:
+              activity.coordinates &&
+              typeof activity.coordinates.lat === 'number' &&
+              typeof activity.coordinates.lng === 'number'
+                ? activity.coordinates
+                : undefined,
+          })),
+        }));
+
+        return itinerary;
+      } catch (parseError) {
+        console.error('Failed to parse itinerary JSON:', chunkLabel, parseError);
+        console.error('Content preview:', chunkLabel, content.substring(0, 800));
+        throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
+      }
+    };
+
+    // For long trips, generate in chunks to avoid AI truncation (which breaks JSON)
+    const CHUNK_DAYS = 5;
+    const mergedDays: Day[] = [];
+
+    for (let startDay = 1; startDay <= numberOfDays; startDay += CHUNK_DAYS) {
+      const daysInChunk = Math.min(CHUNK_DAYS, numberOfDays - startDay + 1);
+      const chunkLabel = `chunk ${startDay}-${startDay + daysInChunk - 1}`;
+
+      const systemPrompt = buildSystemPrompt(daysInChunk, startDay);
+      const userPrompt = buildUserPrompt(daysInChunk, startDay);
+
+      const aiResult = await callAi(systemPrompt, userPrompt);
+      if (!aiResult.ok) {
+        return new Response(JSON.stringify({ error: aiResult.error }), {
+          status: aiResult.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const chunkItinerary = parseItineraryFromContent(aiResult.content, chunkLabel);
+      mergedDays.push(...chunkItinerary.days);
     }
 
-    const data = await response.json();
+    mergedDays.sort((a, b) => a.day_number - b.day_number);
 
-    const content = data.choices?.[0]?.message?.content;
-    
-    if (!content) {
-      console.error('No content in AI response');
-      throw new Error('No content in response');
-    }
-
-    // Parse the JSON from the response - sanitize markdown code blocks
-    let itinerary: { days: Day[] };
-    try {
-      // Strip markdown code blocks if present
-      let jsonString = content.trim();
-      
-      console.log('Raw AI response length:', jsonString.length);
-      
-      // Remove ```json or ``` wrappers
-      const jsonMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonString = jsonMatch[1].trim();
-      }
-      
-      // Remove any leading/trailing non-JSON characters
-      const jsonStart = jsonString.indexOf('{');
-      const jsonEnd = jsonString.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1) {
-        jsonString = jsonString.substring(jsonStart, jsonEnd + 1);
-      }
-      
-      itinerary = JSON.parse(jsonString);
-      
-      // Validate structure
-      if (!itinerary.days || !Array.isArray(itinerary.days)) {
-        console.error('Invalid itinerary structure - missing days array');
-        throw new Error('Invalid structure');
-      }
-      
-      // Ensure all activities have IDs and valid coordinates
-      itinerary.days = itinerary.days.map(day => ({
-        ...day,
-        activities: day.activities.map((activity, idx) => ({
-          ...activity,
-          id: activity.id || `day${day.day_number}-activity${idx}-${Date.now()}`,
-          coordinates: activity.coordinates && 
-                       typeof activity.coordinates.lat === 'number' && 
-                       typeof activity.coordinates.lng === 'number'
-            ? activity.coordinates
-            : undefined, // Remove invalid coordinates
-        })),
-      }));
-      
-    } catch (parseError) {
-      console.error('Failed to parse itinerary JSON:', parseError);
-      console.error('Content preview:', content.substring(0, 500));
-      throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
-    }
-
-    return new Response(JSON.stringify(itinerary), {
+    return new Response(JSON.stringify({ days: mergedDays }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
