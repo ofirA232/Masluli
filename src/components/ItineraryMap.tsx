@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -71,7 +71,7 @@ interface MapBoundsUpdaterProps {
   activities: ActivityWithDay[];
 }
 
-// Component to auto-fit bounds
+// Component to auto-fit bounds - only used inside MapContainer
 function MapBoundsUpdater({ activities }: MapBoundsUpdaterProps) {
   const map = useMap();
 
@@ -101,7 +101,7 @@ interface ActivityMarkerProps {
   onClick?: (activityId: string) => void;
 }
 
-// Separate component for markers to avoid context issues
+// Separate component for markers - only used inside MapContainer
 function ActivityMarker({ activity, isHighlighted, onHover, onClick }: ActivityMarkerProps) {
   // Strict guard - don't render if coordinates are missing or invalid
   if (
@@ -159,6 +159,12 @@ export function ItineraryMap({
   onActivityClick,
 }: ItineraryMapProps) {
   const mapRef = useRef<L.Map | null>(null);
+  
+  // Client-side only rendering to fix React 18 + react-leaflet context issue
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Flatten all activities with their day numbers - with strict validation
   const allActivities = useMemo<ActivityWithDay[]>(() => {
@@ -174,6 +180,7 @@ export function ItineraryMap({
         .filter(
           (activity) =>
             activity &&
+            activity.id &&
             activity.coordinates &&
             isValidCoordinate(activity.coordinates.lat, activity.coordinates.lng)
         )
@@ -212,6 +219,15 @@ export function ItineraryMap({
     };
   }, [allActivities]);
 
+  // Don't render on server or before mount (fixes React 18 context issue)
+  if (!mounted) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-muted/30 rounded-lg">
+        <p className="text-muted-foreground text-center p-4">טוען מפה...</p>
+      </div>
+    );
+  }
+
   // Safety check - don't render map if no valid activities
   if (!allActivities || allActivities.length === 0) {
     return (
@@ -235,20 +251,15 @@ export function ItineraryMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapBoundsUpdater activities={allActivities} />
-
-      {allActivities.map((activity) => {
-        // Extra safety: skip if no valid id
-        if (!activity || !activity.id) return null;
-        return (
-          <ActivityMarker
-            key={activity.id}
-            activity={activity}
-            isHighlighted={highlightedActivityId === activity.id}
-            onHover={onActivityHover}
-            onClick={onActivityClick}
-          />
-        );
-      })}
+      {allActivities.map((activity) => (
+        <ActivityMarker
+          key={activity.id}
+          activity={activity}
+          isHighlighted={highlightedActivityId === activity.id}
+          onHover={onActivityHover}
+          onClick={onActivityClick}
+        />
+      ))}
     </MapContainer>
   );
 }
