@@ -77,7 +77,7 @@ interface Activity {
   time: string;
   category: string;
   image_search_term: string;
-  coordinates: Coordinates;
+  coordinates?: Coordinates;
 }
 
 interface Day {
@@ -283,7 +283,7 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
           { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
         ],
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 8000,
       }),
     });
 
@@ -324,6 +324,8 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       // Strip markdown code blocks if present
       let jsonString = content.trim();
       
+      console.log('Raw AI response length:', jsonString.length);
+      
       // Remove ```json or ``` wrappers
       const jsonMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
@@ -338,8 +340,30 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       }
       
       itinerary = JSON.parse(jsonString);
+      
+      // Validate structure
+      if (!itinerary.days || !Array.isArray(itinerary.days)) {
+        console.error('Invalid itinerary structure - missing days array');
+        throw new Error('Invalid structure');
+      }
+      
+      // Ensure all activities have IDs and valid coordinates
+      itinerary.days = itinerary.days.map(day => ({
+        ...day,
+        activities: day.activities.map((activity, idx) => ({
+          ...activity,
+          id: activity.id || `day${day.day_number}-activity${idx}-${Date.now()}`,
+          coordinates: activity.coordinates && 
+                       typeof activity.coordinates.lat === 'number' && 
+                       typeof activity.coordinates.lng === 'number'
+            ? activity.coordinates
+            : undefined, // Remove invalid coordinates
+        })),
+      }));
+      
     } catch (parseError) {
-      console.error('Failed to parse itinerary JSON');
+      console.error('Failed to parse itinerary JSON:', parseError);
+      console.error('Content preview:', content.substring(0, 500));
       throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
     }
 
