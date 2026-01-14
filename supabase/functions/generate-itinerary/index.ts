@@ -63,6 +63,11 @@ async function verifyAuth(req: Request, corsHeaders: Record<string, string>): Pr
   return { authenticated: true, userId: data.user.id };
 }
 
+interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 interface Activity {
   id: string;
   name: string;
@@ -72,6 +77,7 @@ interface Activity {
   time: string;
   category: string;
   image_search_term: string;
+  coordinates: Coordinates;
 }
 
 interface Day {
@@ -244,7 +250,7 @@ Deno.serve(async (req) => {
 You are an expert travel assistant creating detailed itineraries.
 
 Return this exact JSON structure:
-{"days":[{"day_number":1,"activities":[{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo"}]}]}
+{"days":[{"day_number":1,"activities":[{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}]}]}
 
 Rules:
 - Generate exactly ${numberOfDays} days
@@ -253,7 +259,8 @@ Rules:
 - Prices in Israeli Shekels (₪)
 - image_search_term should be specific (e.g., "Colosseum Rome sunset")
 - Mix different categories throughout each day
-- Consider realistic travel times between locations`;
+- Consider realistic travel times between locations
+- IMPORTANT: For each activity, provide accurate GPS coordinates (lat/lng) for the location. Use real coordinates for the actual addresses.`;
 
     const userPrompt = `Create a ${numberOfDays}-day travel itinerary for ${destination}.
 Number of travelers: ${travelers}

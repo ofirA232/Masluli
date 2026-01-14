@@ -1,3 +1,8 @@
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 export interface Activity {
   id: string;
   name: string;
@@ -7,6 +12,7 @@ export interface Activity {
   time: string;
   category: 'attraction' | 'restaurant' | 'transport' | 'accommodation' | 'shopping' | 'entertainment';
   image_search_term: string;
+  coordinates?: Coordinates;
 }
 
 export interface Day {
