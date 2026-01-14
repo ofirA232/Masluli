@@ -202,5 +202,6 @@ export function useGenerateItinerary() {
     error,
     itinerary,
     swappingActivityId,
+    lastRequest,
   };
 }
