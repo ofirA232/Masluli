@@ -29,19 +29,15 @@ const Trip = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [highlightedActivityId, setHighlightedActivityId] = useState<string | null>(null);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [showMapOnMobile, setShowMapOnMobile] = useState(false);
 
   const handleActivityHover = useCallback((activityId: string | null) => {
     setHighlightedActivityId(activityId);
   }, []);
 
-  const handleActivityClick = useCallback((activityId: string) => {
-    const element = document.getElementById(`activity-${activityId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlightedActivityId(activityId);
-      setTimeout(() => setHighlightedActivityId(null), 2000);
-    }
+  const handleActivitySelect = useCallback((activityId: string) => {
+    setSelectedActivityId(prev => prev === activityId ? null : activityId);
   }, []);
 
   const handleShare = async () => {
@@ -104,6 +100,26 @@ const Trip = () => {
     fetchTrip();
   }, [id]);
 
+  // Build map activities - must be before early returns to maintain hooks order
+  const itinerary = trip?.trip_data;
+  const mapActivities = useMemo(() => {
+    if (!itinerary?.days) return [];
+    return itinerary.days.flatMap((day) =>
+      (day.activities || [])
+        .filter((a) => typeof a.coordinates?.lat === "number" && typeof a.coordinates?.lng === "number")
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          coordinates: a.coordinates,
+          dayNumber: day.day_number,
+          time: a.time,
+        }))
+    );
+  }, [itinerary]);
+
+  const hasCoordinates = mapActivities.length > 0;
+  const numberOfDays = itinerary?.days?.length || 0;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -130,27 +146,6 @@ const Trip = () => {
       </div>
     );
   }
-
-  const itinerary = trip.trip_data;
-  const numberOfDays = itinerary?.days?.length || 0;
-
-  // Build map activities
-  const mapActivities = useMemo(() => {
-    if (!itinerary?.days) return [];
-    return itinerary.days.flatMap((day) =>
-      (day.activities || [])
-        .filter((a) => typeof a.coordinates?.lat === "number" && typeof a.coordinates?.lng === "number")
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          coordinates: a.coordinates,
-          dayNumber: day.day_number,
-          time: a.time,
-        }))
-    );
-  }, [itinerary]);
-
-  const hasCoordinates = mapActivities.length > 0;
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -276,6 +271,8 @@ const Trip = () => {
                             <ActivityCard 
                               activity={activity} 
                               dayNumber={day.day_number}
+                              isSelected={selectedActivityId === activity.id}
+                              onClick={() => handleActivitySelect(activity.id)}
                             />
                           </div>
                         ))}
@@ -298,7 +295,7 @@ const Trip = () => {
             )}
           >
             <div className="h-full min-h-[400px] lg:min-h-0 rounded-lg overflow-hidden shadow-lg">
-              <MapComponent activities={mapActivities} />
+              <MapComponent activities={mapActivities} selectedActivityId={selectedActivityId} />
             </div>
           </div>
         )}
