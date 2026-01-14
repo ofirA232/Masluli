@@ -252,10 +252,10 @@ export function MainContent({
 
       {/* Split view for itinerary with map */}
       {itinerary && itinerary.days && itinerary.days.length > 0 && !isLoading && (
-        <div className="h-full flex flex-col lg:flex-row">
+        <div className="h-full flex flex-col">
           {/* Mobile toggle buttons */}
           {isMobile && hasCoordinates && (
-            <div className="flex border-b border-border bg-card p-2 gap-2">
+            <div className="flex border-b border-border bg-card p-2 gap-2 shrink-0">
               <Button
                 variant={!showMapOnMobile ? "default" : "outline"}
                 size="sm"
@@ -277,119 +277,132 @@ export function MainContent({
             </div>
           )}
 
-          {/* Itinerary List - 50% on desktop, full on mobile (toggleable) */}
-          <div 
-            className={cn(
-              "lg:w-1/2 overflow-y-auto p-6",
-              isMobile && showMapOnMobile && "hidden",
-              isMobile && !showMapOnMobile && "flex-1"
-            )}
-          >
-            <Card className="border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm">
-              <CardHeader className="pb-4 border-b border-slate-100 dark:border-border">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle className="text-2xl font-bold text-slate-800 dark:text-card-foreground flex items-center gap-3">
-                    <div className="p-2 bg-blue-50 dark:bg-primary/10 rounded-lg">
-                      <MapIcon className="h-5 w-5 text-blue-600 dark:text-primary" />
-                    </div>
-                    מסלול הטיול שלך
-                  </CardTitle>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">
-                      {numberOfDays} ימים
-                    </Badge>
-                    {showSaveButton && (
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        onClick={handleSaveTrip}
-                        disabled={isSaving}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="h-4 w-4 ms-1 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4 ms-1" />
+          {/* Desktop: Grid layout with sticky map | Mobile: Toggle */}
+          <div className="flex-1 overflow-hidden">
+            <div className={cn(
+              "h-full",
+              !isMobile && hasCoordinates && "grid grid-cols-12 gap-0",
+              !isMobile && !hasCoordinates && "flex"
+            )}>
+              {/* Itinerary List - 7 cols on desktop with map, full otherwise */}
+              <div 
+                className={cn(
+                  "overflow-y-auto p-6",
+                  !isMobile && hasCoordinates && "col-span-7",
+                  !isMobile && !hasCoordinates && "flex-1",
+                  isMobile && showMapOnMobile && "hidden",
+                  isMobile && !showMapOnMobile && "h-full"
+                )}
+              >
+                <Card className="border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm">
+                  <CardHeader className="pb-4 border-b border-slate-100 dark:border-border">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <CardTitle className="text-2xl font-bold text-slate-800 dark:text-card-foreground flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 dark:bg-primary/10 rounded-lg">
+                          <MapIcon className="h-5 w-5 text-blue-600 dark:text-primary" />
+                        </div>
+                        מסלול הטיול שלך
+                      </CardTitle>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">
+                          {numberOfDays} ימים
+                        </Badge>
+                        {showSaveButton && (
+                          <Button 
+                            variant="default" 
+                            size="sm" 
+                            onClick={handleSaveTrip}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? (
+                              <Loader2 className="h-4 w-4 ms-1 animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4 ms-1" />
+                            )}
+                            {isSaving ? "שומר..." : "שמור טיול"}
+                          </Button>
                         )}
-                        {isSaving ? "שומר..." : "שמור טיול"}
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={onReset}>
-                      <RotateCcw className="h-4 w-4 ms-1" />
-                      מסלול חדש
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <ScrollArea className="h-[calc(100vh-280px)] pe-4">
-                  <div className="space-y-8">
-                    {itinerary.days.map((day) => (
-                      <div key={day.day_number}>
-                        {/* כותרת יום */}
-                        <div className="sticky top-0 bg-white dark:bg-card z-10 pb-4 pt-1">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-blue-600 dark:bg-primary flex items-center justify-center text-white dark:text-primary-foreground font-bold shadow-md">
-                              {day.day_number}
+                        <Button variant="ghost" size="sm" onClick={onReset}>
+                          <RotateCcw className="h-4 w-4 ms-1" />
+                          מסלול חדש
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <ScrollArea className="h-[calc(100vh-280px)] pe-4">
+                      <div className="space-y-8">
+                        {itinerary.days.map((day) => (
+                          <div key={day.day_number}>
+                            {/* כותרת יום */}
+                            <div className="sticky top-0 bg-white dark:bg-card z-10 pb-4 pt-1">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-blue-600 dark:bg-primary flex items-center justify-center text-white dark:text-primary-foreground font-bold shadow-md">
+                                  {day.day_number}
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-lg text-slate-800 dark:text-card-foreground">
+                                    יום {day.day_number}
+                                  </h3>
+                                  <p className="text-sm text-slate-500 dark:text-muted-foreground">
+                                    {day.activities.length} פעילויות
+                                  </p>
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-lg text-slate-800 dark:text-card-foreground">
-                                יום {day.day_number}
-                              </h3>
-                              <p className="text-sm text-slate-500 dark:text-muted-foreground">
-                                {day.activities.length} פעילויות
-                              </p>
+
+                            {/* פעילויות היום */}
+                            <div className="space-y-3 ps-5 border-s-2 border-blue-100 dark:border-border ms-5">
+                              {day.activities.map((activity, index) => (
+                                <div 
+                                  key={activity.id || index} 
+                                  id={`activity-${activity.id}`}
+                                  className={cn(
+                                    "relative transition-all duration-300",
+                                    highlightedActivityId === activity.id && "ring-2 ring-primary ring-offset-2 rounded-lg"
+                                  )}
+                                  onMouseEnter={() => handleActivityHover(activity.id)}
+                                  onMouseLeave={() => handleActivityHover(null)}
+                                >
+                                  {/* קו מחבר */}
+                                  <div className="absolute -start-[25px] top-8 w-4 h-0.5 bg-blue-100 dark:bg-border" />
+                                  <div className="absolute -start-[29px] top-7 w-3 h-3 rounded-full bg-blue-100 dark:bg-primary/20 border-2 border-blue-400 dark:border-primary" />
+                                  
+                                  <ActivityCard 
+                                    activity={activity} 
+                                    dayNumber={day.day_number}
+                                    isSwapping={swappingActivityId === activity.id}
+                                    onSwap={onSwapActivity}
+                                  />
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        </div>
-
-                        {/* פעילויות היום */}
-                        <div className="space-y-3 ps-5 border-s-2 border-blue-100 dark:border-border ms-5">
-                          {day.activities.map((activity, index) => (
-                            <div 
-                              key={activity.id || index} 
-                              id={`activity-${activity.id}`}
-                              className={cn(
-                                "relative transition-all duration-300",
-                                highlightedActivityId === activity.id && "ring-2 ring-primary ring-offset-2 rounded-lg"
-                              )}
-                              onMouseEnter={() => handleActivityHover(activity.id)}
-                              onMouseLeave={() => handleActivityHover(null)}
-                            >
-                              {/* קו מחבר */}
-                              <div className="absolute -start-[25px] top-8 w-4 h-0.5 bg-blue-100 dark:bg-border" />
-                              <div className="absolute -start-[29px] top-7 w-3 h-3 rounded-full bg-blue-100 dark:bg-primary/20 border-2 border-blue-400 dark:border-primary" />
-                              
-                              <ActivityCard 
-                                activity={activity} 
-                                dayNumber={day.day_number}
-                                isSwapping={swappingActivityId === activity.id}
-                                onSwap={onSwapActivity}
-                              />
-                            </div>
-                          ))}
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Map - 50% on desktop, full on mobile (toggleable) */}
-          {hasCoordinates && (
-            <div 
-              className={cn(
-                "lg:w-1/2 bg-muted/30 p-4",
-                isMobile && !showMapOnMobile && "hidden",
-                isMobile && showMapOnMobile && "flex-1"
-              )}
-            >
-              <div className="h-full min-h-[400px] lg:min-h-0 rounded-lg overflow-hidden shadow-lg">
-                <MapComponent activities={mapActivities} />
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
               </div>
+
+              {/* Map - 5 cols on desktop, sticky | Mobile: toggleable full screen */}
+              {hasCoordinates && (
+                <div 
+                  className={cn(
+                    isMobile && !showMapOnMobile && "hidden",
+                    isMobile && showMapOnMobile && "h-full",
+                    !isMobile && "col-span-5 sticky top-0 h-screen"
+                  )}
+                >
+                  <div className="h-full p-4">
+                    <div className="h-full rounded-xl overflow-hidden shadow-lg">
+                      <MapComponent activities={mapActivities} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </main>
