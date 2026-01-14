@@ -80,6 +80,46 @@ function MapBoundsUpdater({ activities }: MapBoundsUpdaterProps) {
   return null;
 }
 
+interface ActivityMarkerProps {
+  activity: ActivityWithDay;
+  isHighlighted: boolean;
+  onHover?: (activityId: string | null) => void;
+  onClick?: (activityId: string) => void;
+}
+
+// Separate component for markers to avoid context issues
+function ActivityMarker({ activity, isHighlighted, onHover, onClick }: ActivityMarkerProps) {
+  return (
+    <Marker
+      position={[activity.coordinates!.lat, activity.coordinates!.lng]}
+      icon={isHighlighted ? highlightedIcon : defaultIcon}
+      eventHandlers={{
+        mouseover: () => onHover?.(activity.id),
+        mouseout: () => onHover?.(null),
+        click: () => onClick?.(activity.id),
+      }}
+    >
+      <Popup>
+        <div className="text-right min-w-[200px]" dir="rtl">
+          <div
+            className="w-full h-24 rounded-md mb-2 bg-cover bg-center"
+            style={{
+              backgroundColor: categoryColors[activity.category] || '#6B7280',
+              backgroundImage: `url(https://source.unsplash.com/200x150/?${encodeURIComponent(
+                activity.image_search_term
+              )})`,
+            }}
+          />
+          <h3 className="font-bold text-sm mb-1">{activity.name}</h3>
+          <p className="text-xs text-gray-600 mb-1">יום {activity.dayNumber}</p>
+          <p className="text-xs text-gray-500">{activity.time}</p>
+          <p className="text-xs text-gray-500 mt-1">{activity.address}</p>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
 interface ItineraryMapProps {
   itinerary: Itinerary;
   highlightedActivityId?: string | null;
@@ -148,34 +188,13 @@ export function ItineraryMap({
       <MapBoundsUpdater activities={allActivities} />
 
       {allActivities.map((activity) => (
-        <Marker
+        <ActivityMarker
           key={activity.id}
-          position={[activity.coordinates!.lat, activity.coordinates!.lng]}
-          icon={highlightedActivityId === activity.id ? highlightedIcon : defaultIcon}
-          eventHandlers={{
-            mouseover: () => onActivityHover?.(activity.id),
-            mouseout: () => onActivityHover?.(null),
-            click: () => onActivityClick?.(activity.id),
-          }}
-        >
-          <Popup>
-            <div className="text-right min-w-[200px]" dir="rtl">
-              <div
-                className="w-full h-24 rounded-md mb-2 bg-cover bg-center"
-                style={{
-                  backgroundColor: categoryColors[activity.category] || '#6B7280',
-                  backgroundImage: `url(https://source.unsplash.com/200x150/?${encodeURIComponent(
-                    activity.image_search_term
-                  )})`,
-                }}
-              />
-              <h3 className="font-bold text-sm mb-1">{activity.name}</h3>
-              <p className="text-xs text-gray-600 mb-1">יום {activity.dayNumber}</p>
-              <p className="text-xs text-gray-500">{activity.time}</p>
-              <p className="text-xs text-gray-500 mt-1">{activity.address}</p>
-            </div>
-          </Popup>
-        </Marker>
+          activity={activity}
+          isHighlighted={highlightedActivityId === activity.id}
+          onHover={onActivityHover}
+          onClick={onActivityClick}
+        />
       ))}
     </MapContainer>
   );
