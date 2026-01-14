@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, MapPin, Calendar, Home, Plus } from "lucide-react";
+import { Loader2, MapPin, Calendar, Home, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
 import type { Itinerary } from "@/types/itinerary";
 
@@ -16,9 +28,11 @@ interface TripSummary {
 
 const MyTrips = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTrips = async () => {
@@ -31,9 +45,11 @@ const MyTrips = () => {
           return;
         }
 
+        // Fetch only the user's own trips
         const { data, error: fetchError } = await supabase
           .from("trips")
           .select("*")
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
         if (fetchError) {
@@ -60,6 +76,37 @@ const MyTrips = () => {
 
     fetchTrips();
   }, []);
+
+  const handleDeleteTrip = async (tripId: string) => {
+    setDeletingId(tripId);
+    try {
+      const { error: deleteError } = await supabase
+        .from("trips")
+        .delete()
+        .eq("id", tripId);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      // Remove from local state
+      setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
+      
+      toast({
+        title: "הטיול נמחק",
+        description: "הטיול הוסר מהרשימה שלך",
+      });
+    } catch (err) {
+      logger.error("Error deleting trip:", err);
+      toast({
+        title: "שגיאה במחיקה",
+        description: "לא ניתן למחוק את הטיול. נסה שוב.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Get the first image from the itinerary for the card background
   const getFirstImage = (itinerary: Itinerary): string | null => {
@@ -146,11 +193,13 @@ const MyTrips = () => {
             {trips.map((trip) => (
               <Card
                 key={trip.id}
-                className="group cursor-pointer overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-                onClick={() => navigate(`/trip/${trip.id}`)}
+                className="group overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
               >
-                {/* Background Image */}
-                <div className="relative h-40 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden">
+                {/* Background Image - Clickable */}
+                <div 
+                  className="relative h-40 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden cursor-pointer"
+                  onClick={() => navigate(`/trip/${trip.id}`)}
+                >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10" />
                   {getFirstImage(trip.trip_data) && (
                     <img
@@ -177,9 +226,45 @@ const MyTrips = () => {
                       <Calendar className="h-4 w-4" />
                       <span>{new Date(trip.created_at).toLocaleDateString("he-IL")}</span>
                     </div>
-                    <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-medium">
-                      {getTripDays(trip.trip_data)} ימים
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-medium">
+                        {getTripDays(trip.trip_data)} ימים
+                      </span>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {deletingId === trip.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>האם למחוק את הטיול?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              פעולה זו תמחק לצמיתות את הטיול ל{trip.destination}. 
+                              לא ניתן לבטל פעולה זו.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter className="gap-2">
+                            <AlertDialogCancel>ביטול</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteTrip(trip.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              מחק טיול
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
