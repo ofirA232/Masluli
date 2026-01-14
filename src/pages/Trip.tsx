@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, ArrowRight, Share2, Home, FolderOpen, MapPin, List, Map as MapIcon } from "lucide-react";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { logger } from "@/lib/logger";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ItineraryMap } from "@/components/ItineraryMap";
+import MapComponent from "@/components/MapComponent";
 import { ActivityCard } from "@/components/ActivityCard";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -133,9 +133,24 @@ const Trip = () => {
 
   const itinerary = trip.trip_data;
   const numberOfDays = itinerary?.days?.length || 0;
-  const hasCoordinates = itinerary?.days?.some(day => 
-    day.activities?.some(activity => activity.coordinates?.lat && activity.coordinates?.lng)
-  );
+
+  // Build map activities
+  const mapActivities = useMemo(() => {
+    if (!itinerary?.days) return [];
+    return itinerary.days.flatMap((day) =>
+      (day.activities || [])
+        .filter((a) => typeof a.coordinates?.lat === "number" && typeof a.coordinates?.lng === "number")
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          coordinates: a.coordinates,
+          dayNumber: day.day_number,
+          time: a.time,
+        }))
+    );
+  }, [itinerary]);
+
+  const hasCoordinates = mapActivities.length > 0;
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -283,12 +298,7 @@ const Trip = () => {
             )}
           >
             <div className="h-full min-h-[400px] lg:min-h-0 rounded-lg overflow-hidden shadow-lg">
-              <ItineraryMap
-                itinerary={itinerary}
-                highlightedActivityId={highlightedActivityId}
-                onActivityHover={handleActivityHover}
-                onActivityClick={handleActivityClick}
-              />
+              <MapComponent activities={mapActivities} />
             </div>
           </div>
         )}
