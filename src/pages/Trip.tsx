@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MainContent } from "@/components/MainContent";
 import { Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { logger } from "@/lib/logger";
 import type { Itinerary } from "@/types/itinerary";
 
 interface TripData {
@@ -35,7 +36,7 @@ const Trip = () => {
           .single();
 
         if (fetchError) {
-          console.error("Error fetching trip:", fetchError);
+          logger.error("Error fetching trip:", fetchError);
           setError("לא נמצא טיול עם המזהה הזה");
           return;
         }
@@ -47,7 +48,7 @@ const Trip = () => {
           created_at: data.created_at,
         });
       } catch (err) {
-        console.error("Error:", err);
+        logger.error("Error:", err);
         setError("שגיאה בטעינת הטיול");
       } finally {
         setLoading(false);

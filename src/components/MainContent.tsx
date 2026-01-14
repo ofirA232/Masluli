@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Compass, Map, Sparkles, RotateCcw, Loader2, Save, Share2 } from "lucide-react";
+import { Compass, Map, Sparkles, RotateCcw, Loader2, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ActivityCard, ActivityCardSkeleton } from "@/components/ActivityCard";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import type { Itinerary } from "@/types/itinerary";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -89,7 +90,7 @@ export function MainContent({
       // Navigate to the trip page
       navigate(`/trip/${data.id}`);
     } catch (err) {
-      console.error("Error saving trip:", err);
+      logger.error("Error saving trip:", err);
       toast({
         title: "שגיאה בשמירת הטיול",
         description: "אנא נסה שוב מאוחר יותר",

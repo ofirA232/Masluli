@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import type { Activity } from "@/types/itinerary";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,7 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap }
         });
 
         if (error) {
-          console.error('Error fetching Unsplash image:', error);
+          logger.error('Error fetching Unsplash image:', error);
           setImageError(true);
           return;
         }
@@ -84,7 +85,7 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap }
           setImageError(true);
         }
       } catch (err) {
-        console.error('Error fetching image:', err);
+        logger.error('Error fetching image:', err);
         setImageError(true);
       }
     };
