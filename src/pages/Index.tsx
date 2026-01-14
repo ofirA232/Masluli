@@ -13,6 +13,7 @@ const Index = () => {
     resetItinerary,
     swapActivity,
     swappingActivityId,
+    lastRequest,
   } = useGenerateItinerary();
 
   const { user, loading: authLoading, signOut } = useAuth();
@@ -42,6 +43,8 @@ const Index = () => {
         onReset={resetItinerary}
         swappingActivityId={swappingActivityId}
         onSwapActivity={swapActivity}
+        destination={lastRequest?.destination}
+        showSaveButton={!!itinerary && !!user}
       />
       <TravelSidebar 
         onGenerate={generateItinerary} 

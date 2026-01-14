@@ -1,10 +1,15 @@
-import { Compass, Map, Sparkles, RotateCcw, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Compass, Map, Sparkles, RotateCcw, Loader2, Save, Share2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActivityCard, ActivityCardSkeleton } from "@/components/ActivityCard";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import type { Itinerary } from "@/types/itinerary";
+import type { Json } from "@/integrations/supabase/types";
 
 const features = [
   {
@@ -31,6 +36,8 @@ interface MainContentProps {
   onReset: () => void;
   swappingActivityId?: string | null;
   onSwapActivity?: (dayNumber: number, activityId: string, activityName: string) => Promise<unknown>;
+  destination?: string;
+  showSaveButton?: boolean;
 }
 
 export function MainContent({ 
@@ -40,9 +47,58 @@ export function MainContent({
   onReset,
   swappingActivityId,
   onSwapActivity,
+  destination,
+  showSaveButton = false,
 }: MainContentProps) {
+  const [isSaving, setIsSaving] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const showWelcome = !itinerary && !isLoading;
   const numberOfDays = itinerary?.days?.length || 0;
+
+  const handleSaveTrip = async () => {
+    if (!itinerary || !destination) {
+      toast({
+        title: "שגיאה",
+        description: "אין מסלול לשמירה",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data, error: insertError } = await supabase
+        .from("trips")
+        .insert({
+          destination: destination,
+          trip_data: itinerary as unknown as Json,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      toast({
+        title: "הטיול נשמר בהצלחה! ✈️",
+        description: "מעביר אותך לדף הטיול...",
+      });
+
+      // Navigate to the trip page
+      navigate(`/trip/${data.id}`);
+    } catch (err) {
+      console.error("Error saving trip:", err);
+      toast({
+        title: "שגיאה בשמירת הטיול",
+        description: "אנא נסה שוב מאוחר יותר",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <main className="flex-1 min-h-screen bg-slate-50 dark:bg-background p-8 overflow-y-auto">
@@ -149,6 +205,21 @@ export function MainContent({
                   <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">
                     {numberOfDays} ימים
                   </Badge>
+                  {showSaveButton && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={handleSaveTrip}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 ms-1 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 ms-1" />
+                      )}
+                      {isSaving ? "שומר..." : "שמור טיול"}
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={onReset}>
                     <RotateCcw className="h-4 w-4 ms-1" />
                     מסלול חדש
