@@ -67,6 +67,18 @@ export function MainContent({
       return;
     }
 
+    // Get the current authenticated user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast({
+        title: "יש להתחבר",
+        description: "עליך להיות מחובר כדי לשמור טיול",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const { data, error: insertError } = await supabase
@@ -74,6 +86,8 @@ export function MainContent({
         .insert({
           destination: destination,
           trip_data: itinerary as unknown as Json,
+          user_id: user.id,
+          user_email: user.email,
         })
         .select("id")
         .single();
