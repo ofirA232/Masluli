@@ -27,9 +27,11 @@ interface ActivityCardProps {
   dayNumber: number;
   isSwapping?: boolean;
   onSwap?: (dayNumber: number, activityId: string, activityName: string) => Promise<unknown>;
+  isSelected?: boolean;
+  onClick?: () => void;
 }
 
-export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap }: ActivityCardProps) {
+export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, isSelected = false, onClick }: ActivityCardProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -107,11 +109,15 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap }
   return (
     <div 
       className={cn(
-        "relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 transition-all duration-300",
+        "relative bg-white dark:bg-slate-800 rounded-xl border-2 p-4 transition-all duration-300 cursor-pointer",
         isSwapping 
-          ? "opacity-50 pointer-events-none" 
-          : "hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800"
+          ? "opacity-50 pointer-events-none border-slate-200 dark:border-slate-700" 
+          : "hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800",
+        isSelected 
+          ? "border-primary ring-2 ring-primary/20 shadow-lg" 
+          : "border-slate-200 dark:border-slate-700"
       )}
+      onClick={onClick}
     >
       {/* כפתור החלפה */}
       <Button
