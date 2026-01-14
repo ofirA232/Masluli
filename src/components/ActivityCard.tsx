@@ -185,7 +185,7 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
           </h4>
 
           {/* תגית קטגוריה */}
-          <div className="flex flex-wrap gap-1.5 mb-3">
+          <div className="flex flex-wrap gap-1.5 mb-2">
             <Badge
               variant="secondary"
               className="text-xs bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 font-normal"
@@ -193,6 +193,13 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
               {categoryLabel}
             </Badge>
           </div>
+
+          {/* תיאור */}
+          {activity.description && (
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-3" title={activity.description}>
+              {activity.description}
+            </p>
+          )}
 
           {/* פרטים */}
           <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">

@@ -306,7 +306,7 @@ Deno.serve(async (req) => {
 You are an expert travel assistant creating detailed itineraries.
 
 Return this exact JSON structure:
-{"days":[{"day_number":${startDayNumber},"activities":[{"id":"unique-id","name":"Activity Name","description":"Brief description","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}]}]}
+{"days":[{"day_number":${startDayNumber},"activities":[{"id":"unique-id","name":"Activity Name","description":"A meaningful 2-3 sentence summary","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}]}]}
 
 Rules:
 - Generate exactly ${daysInChunk} days
@@ -319,7 +319,8 @@ Rules:
 - Consider realistic travel times between locations
 - IMPORTANT: For each activity, provide accurate GPS coordinates (lat/lng) for the location. Use real coordinates for the actual addresses.
 - CRITICAL JSON RULES: All string values MUST be a single line (no raw newlines). Do NOT include double quotes (") inside any string value.
-- id must be a short lowercase kebab-case slug (no spaces), e.g., "eiffel-tower-visit".`;
+- id must be a short lowercase kebab-case slug (no spaces), e.g., "eiffel-tower-visit".
+- DESCRIPTION QUALITY: For the description field, provide a meaningful 2-3 sentence summary explaining what the attraction is and why it is famous or worth visiting. Do NOT use generic phrases like "Visit this place" or "A great spot". Example for London Eye: "Europes tallest cantilevered observation wheel, offering breathtaking 360-degree views of the capitals skyline. A must-see landmark that provides stunning photo opportunities day and night."`;
     };
 
     const buildUserPrompt = (daysInChunk: number, startDayNumber: number) => {
