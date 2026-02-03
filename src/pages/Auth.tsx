@@ -6,8 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { 
+  validatePassword, 
+  getPasswordStrength, 
+  getPasswordStrengthLabel,
+  getPasswordStrengthColor 
+} from "@/lib/password-validation";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -62,8 +69,9 @@ export default function Auth() {
       return;
     }
 
-    if (password.length < 6) {
-      toast.error("הסיסמה חייבת להכיל לפחות 6 תווים");
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
+      toast.error(passwordCheck.error);
       return;
     }
 
@@ -192,7 +200,7 @@ export default function Auth() {
                       <Input
                         id="signup-password"
                         type="password"
-                        placeholder="לפחות 6 תווים"
+                        placeholder="לפחות 8 תווים עם מורכבות"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="ps-10"
@@ -200,6 +208,17 @@ export default function Auth() {
                         dir="ltr"
                       />
                     </div>
+                    {password && (
+                      <div className="space-y-1">
+                        <Progress 
+                          value={getPasswordStrength(password)} 
+                          className={`h-2 [&>div]:${getPasswordStrengthColor(getPasswordStrength(password))}`}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          עוצמת סיסמה: {getPasswordStrengthLabel(getPasswordStrength(password))}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
