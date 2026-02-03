@@ -306,10 +306,10 @@ Deno.serve(async (req) => {
 You are an expert travel assistant creating detailed itineraries.
 
 Return this exact JSON structure:
-{"days":[{"day_number":${startDayNumber},"activities":[{"id":"unique-id","name":"Activity Name","description":"A meaningful 2-3 sentence summary","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818}}]}]}
+{"days":[{"day_number":${startDayNumber},"activities":[{"id":"unique-id","name":"Activity Name","description":"A meaningful 2-3 sentence summary","price":"₪100-150","address":"Full address","time":"09:00-11:00","category":"attraction","image_search_term":"search term for photo","coordinates":{"lat":32.0853,"lng":34.7818},"is_paid":true,"booking_url":"https://official-booking-site.com or null"}]}]}
 
 Rules:
-- LANGUAGE: ALL text content (name, description, address) MUST be written in Hebrew (עברית). Only the id and image_search_term should be in English.
+- LANGUAGE: ALL text content (name, description, address) MUST be written in Hebrew (עברית). Only the id, image_search_term, and booking_url should be in English.
 - Generate exactly ${daysInChunk} days
 - day_number MUST start at ${startDayNumber} and end at ${endDayNumber}
 - Include 4-6 activities per day
@@ -321,7 +321,8 @@ Rules:
 - IMPORTANT: For each activity, provide accurate GPS coordinates (lat/lng) for the location. Use real coordinates for the actual addresses.
 - CRITICAL JSON RULES: All string values MUST be a single line (no raw newlines). Do NOT include double quotes (") inside any string value.
 - id must be a short lowercase kebab-case slug in English (no spaces), e.g., "eiffel-tower-visit".
-- DESCRIPTION QUALITY: For the description field, provide a meaningful 2-3 sentence summary in Hebrew explaining what the attraction is and why it is famous or worth visiting. Do NOT use generic phrases. Example for London Eye: "גלגל התצפית הגבוה באירופה, המציע נוף פנורמי מרהיב של 360 מעלות על קו הרקיע של לונדון. אטרקציה חובה המספקת הזדמנויות צילום מדהימות ביום ובלילה."`;
+- DESCRIPTION QUALITY: For the description field, provide a meaningful 2-3 sentence summary in Hebrew explaining what the attraction is and why it is famous or worth visiting. Do NOT use generic phrases. Example for London Eye: "גלגל התצפית הגבוה באירופה, המציע נוף פנורמי מרהיב של 360 מעלות על קו הרקיע של לונדון. אטרקציה חובה המספקת הזדמנויות צילום מדהימות ביום ובלילה."
+- TICKETING: Set is_paid to true if the activity requires purchasing tickets or paying an entry fee. Set to false for free activities. For paid activities, provide the official booking_url if known (e.g., museum websites, attraction ticket pages), otherwise set to null.`;
     };
 
     const buildUserPrompt = (daysInChunk: number, startDayNumber: number) => {

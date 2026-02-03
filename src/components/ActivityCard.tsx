@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MapPin, RefreshCw, DollarSign, Image as ImageIcon, Loader2 } from "lucide-react";
+import { MapPin, RefreshCw, DollarSign, Image as ImageIcon, Loader2, Ticket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,9 +29,10 @@ interface ActivityCardProps {
   onSwap?: (dayNumber: number, activityId: string, activityName: string) => Promise<unknown>;
   isSelected?: boolean;
   onClick?: () => void;
+  destination?: string;
 }
 
-export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, isSelected = false, onClick }: ActivityCardProps) {
+export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, isSelected = false, onClick, destination }: ActivityCardProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -95,6 +96,10 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
     fetchImage();
   }, [activity.image_search_term, activity.name, activity.id]);
 
+  // Check if activity is paid (either is_paid=true or price is not free)
+  const isPaidActivity = activity.is_paid === true || 
+    (activity.price && !activity.price.includes("0") && !activity.price.toLowerCase().includes("free") && !activity.price.includes("חינם"));
+
   const handleSwap = async () => {
     if (!onSwap) return;
     
@@ -104,6 +109,21 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
     } catch (err) {
       toast.error("שגיאה בהחלפת הפעילות");
     }
+  };
+
+  const handleBuyTickets = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    
+    let url: string;
+    if (activity.booking_url) {
+      url = activity.booking_url;
+    } else {
+      // Fallback: Google search for tickets
+      const searchQuery = encodeURIComponent(`buy tickets for ${activity.name} ${destination || ''}`);
+      url = `https://www.google.com/search?q=${searchQuery}`;
+    }
+    
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -119,20 +139,36 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
       )}
       onClick={onClick}
     >
-      {/* כפתור החלפה */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-2 left-2 h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 z-10"
-        onClick={handleSwap}
-        disabled={isSwapping || !onSwap}
-      >
-        {isSwapping ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <RefreshCw className="h-4 w-4" />
+      {/* כפתורי פעולה */}
+      <div className="absolute top-2 left-2 flex gap-1 z-10">
+        {/* כפתור קנה כרטיסים */}
+        {isPaidActivity && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 text-amber-600 border-amber-200 hover:text-amber-700 hover:bg-amber-50 hover:border-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/20"
+            onClick={handleBuyTickets}
+            title="קנה כרטיסים"
+          >
+            <Ticket className="h-4 w-4" />
+          </Button>
         )}
-      </Button>
+        
+        {/* כפתור החלפה */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+          onClick={(e) => { e.stopPropagation(); handleSwap(); }}
+          disabled={isSwapping || !onSwap}
+        >
+          {isSwapping ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
 
       {/* Loading overlay */}
       {isSwapping && (

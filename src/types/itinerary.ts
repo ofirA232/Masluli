@@ -13,6 +13,8 @@ export interface Activity {
   category: 'attraction' | 'restaurant' | 'transport' | 'accommodation' | 'shopping' | 'entertainment';
   image_search_term: string;
   coordinates?: Coordinates;
+  is_paid?: boolean;
+  booking_url?: string | null;
 }
 
 export interface Day {
