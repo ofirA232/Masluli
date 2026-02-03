@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ArrowRight, Share2, Home, FolderOpen, MapPin, List, Map as MapIcon } from "lucide-react";
+import { Loader2, ArrowRight, Share2, Home, FolderOpen, MapPin, List, Map as MapIcon, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logger } from "@/lib/logger";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/useAuth";
 import MapComponent from "@/components/MapComponent";
 import { ActivityCard } from "@/components/ActivityCard";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,18 +20,25 @@ interface TripData {
   destination: string;
   trip_data: Itinerary;
   created_at: string;
+  share_token: string | null;
+  user_id: string | null;
 }
 
 const Trip = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const shareToken = searchParams.get('share_token');
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const [trip, setTrip] = useState<TripData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [highlightedActivityId, setHighlightedActivityId] = useState<string | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [showMapOnMobile, setShowMapOnMobile] = useState(false);
+  const [isGeneratingShareLink, setIsGeneratingShareLink] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const handleActivityHover = useCallback((activityId: string | null) => {
     setHighlightedActivityId(activityId);
@@ -40,9 +48,63 @@ const Trip = () => {
     setSelectedActivityId(prev => prev === activityId ? null : activityId);
   }, []);
 
+  // Check if current user is the trip owner
+  const isOwner = trip?.user_id && user?.id === trip.user_id;
+
+  const generateShareToken = async (): Promise<string | null> => {
+    if (!trip || !isOwner) return null;
+    
+    // If already has share token, return it
+    if (trip.share_token) return trip.share_token;
+
+    setIsGeneratingShareLink(true);
+    try {
+      // Generate new share token using RPC
+      const { data: newToken, error: rpcError } = await supabase.rpc('generate_share_token');
+      
+      if (rpcError) {
+        logger.error("Error generating share token:", rpcError);
+        return null;
+      }
+
+      // Update the trip with the share token
+      const { error: updateError } = await supabase
+        .from("trips")
+        .update({ share_token: newToken })
+        .eq("id", trip.id);
+
+      if (updateError) {
+        logger.error("Error saving share token:", updateError);
+        return null;
+      }
+
+      // Update local state
+      setTrip(prev => prev ? { ...prev, share_token: newToken } : null);
+      return newToken;
+    } finally {
+      setIsGeneratingShareLink(false);
+    }
+  };
+
   const handleShare = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      let shareUrl = `${window.location.origin}/trip/${trip?.id}`;
+      
+      // If owner and trip doesn't have share token, generate one
+      if (isOwner) {
+        const token = await generateShareToken();
+        if (token) {
+          shareUrl += `?share_token=${token}`;
+        }
+      } else if (shareToken) {
+        // If viewing via share token, share with that token
+        shareUrl += `?share_token=${shareToken}`;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+      
       toast({
         title: "הקישור הועתק!",
         description: "הקישור הועתק ללוח. מוכן לשיתוף!",
@@ -66,20 +128,28 @@ const Trip = () => {
       }
 
       try {
-        // Trips are now publicly viewable for sharing
-        const { data, error: fetchError } = await supabase
+        // Build query - if share_token provided, use it for RLS policy
+        let query = supabase
           .from("trips")
           .select("*")
-          .eq("id", id)
-          .single();
+          .eq("id", id);
+        
+        // If share token is provided in URL, we need to pass it to the query context
+        // The RLS policy will check current_setting('request.query.share_token')
+        if (shareToken) {
+          query = query.eq("share_token", shareToken);
+        }
+
+        const { data, error: fetchError } = await query.maybeSingle();
 
         if (fetchError) {
           logger.error("Error fetching trip:", fetchError);
-          if (fetchError.code === 'PGRST116') {
-            setError("טיול זה לא נמצא");
-          } else {
-            setError("לא נמצא טיול עם המזהה הזה");
-          }
+          setError("שגיאה בטעינת הטיול");
+          return;
+        }
+
+        if (!data) {
+          setError("טיול זה לא נמצא או שאין לך הרשאות לצפות בו");
           return;
         }
 
@@ -88,6 +158,8 @@ const Trip = () => {
           destination: data.destination,
           trip_data: data.trip_data as unknown as Itinerary,
           created_at: data.created_at,
+          share_token: data.share_token,
+          user_id: data.user_id,
         });
       } catch (err) {
         logger.error("Error:", err);
@@ -98,7 +170,7 @@ const Trip = () => {
     };
 
     fetchTrip();
-  }, [id]);
+  }, [id, shareToken]);
 
   // Build map activities - must be before early returns to maintain hooks order
   const itinerary = trip?.trip_data;
@@ -161,9 +233,19 @@ const Trip = () => {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" onClick={handleShare}>
-              <Share2 className="h-4 w-4 ms-2" />
-              שתף
+            <Button 
+              variant="outline" 
+              onClick={handleShare}
+              disabled={isGeneratingShareLink}
+            >
+              {isGeneratingShareLink ? (
+                <Loader2 className="h-4 w-4 ms-2 animate-spin" />
+              ) : copiedLink ? (
+                <Check className="h-4 w-4 ms-2" />
+              ) : (
+                <Share2 className="h-4 w-4 ms-2" />
+              )}
+              {isGeneratingShareLink ? "יוצר קישור..." : copiedLink ? "הועתק!" : "שתף"}
             </Button>
             <Button variant="outline" asChild>
               <Link to="/my-trips">
