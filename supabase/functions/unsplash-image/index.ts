@@ -1,5 +1,6 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { checkRateLimit, createRateLimitResponse, RATE_LIMITS } from '../_shared/rate-limit.ts';
 
 // Allowed origins - restrict to your domains
 const allowedOrigins = [
@@ -116,6 +117,12 @@ Deno.serve(async (req) => {
   const authResult = await verifyAuth(req, corsHeaders);
   if (!authResult.authenticated) {
     return authResult.response;
+  }
+
+  // Rate limiting - image API calls (50 per hour)
+  const rateLimitResult = checkRateLimit(authResult.userId, RATE_LIMITS.IMAGE_API);
+  if (!rateLimitResult.allowed) {
+    return createRateLimitResponse(corsHeaders, rateLimitResult.resetAt);
   }
 
   try {
