@@ -128,3 +128,212 @@ All colors MUST be HSL.
   filter: hue-rotate(180deg) saturate(1.5);
   z-index: 1000 !important;
 }
+
+/* ========== Print Styles ========== */
+@media print {
+  /* Reset page */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  /* Hide everything by default, then show what we need */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.4;
+    direction: rtl;
+  }
+
+  /* Hide sidebar, map, navbar, all buttons */
+  [data-sidebar],
+  .sidebar,
+  nav,
+  header:not(.print-header),
+  button,
+  [role="button"],
+  .print\\:hidden,
+  /* Map components */
+  [class*="MapComponent"],
+  [class*="pigeon-map"],
+  .pigeon-tiles-box,
+  /* Mobile toggle buttons */
+  .flex.border-b.border-border.bg-card,
+  /* Map column in grid */
+  .col-span-5,
+  /* Scroll indicators */
+  [class*="scrollbar"],
+  /* Action buttons on cards */
+  .absolute.top-2.left-2 {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Make itinerary full width */
+  .col-span-7,
+  .grid.grid-cols-12 > div:first-child {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Remove grid layout */
+  .grid.grid-cols-12 {
+    display: block !important;
+  }
+
+  /* Remove shadows and borders for clean print */
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Cards styling for print */
+  .rounded-xl,
+  .rounded-lg {
+    border-radius: 4px !important;
+  }
+
+  /* Activity cards - prevent page breaks */
+  [class*="ActivityCard"],
+  .relative.bg-white,
+  .space-y-3 > div {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border: 1px solid #e5e7eb !important;
+    margin-bottom: 12px !important;
+    padding: 12px !important;
+  }
+
+  /* Day headers - keep with content */
+  .sticky.top-0 {
+    position: relative !important;
+    background: white !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Day number circles */
+  .h-10.w-10.rounded-full {
+    background: #1e40af !important;
+    color: white !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Remove scroll areas */
+  [class*="ScrollArea"],
+  [data-radix-scroll-area-viewport] {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Timeline styling */
+  .border-s-2 {
+    border-color: #93c5fd !important;
+  }
+
+  /* Text colors for print */
+  .text-slate-800,
+  .text-card-foreground,
+  h3, h4, p {
+    color: black !important;
+  }
+
+  .text-slate-500,
+  .text-muted-foreground {
+    color: #4b5563 !important;
+  }
+
+  /* Badge styling */
+  .bg-blue-100 {
+    background: #dbeafe !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .bg-slate-100 {
+    background: #f1f5f9 !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Time badges */
+  .bg-blue-50 {
+    background: #eff6ff !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Images in cards */
+  .w-24.h-24 {
+    width: 80px !important;
+    height: 80px !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Main container */
+  .min-h-screen {
+    min-height: auto !important;
+  }
+
+  .flex.min-h-screen {
+    display: block !important;
+  }
+
+  /* Overflow handling */
+  .overflow-hidden,
+  .overflow-y-auto,
+  .overflow-x-hidden {
+    overflow: visible !important;
+  }
+
+  /* Full width for content */
+  .flex-1,
+  main {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Card header */
+  .border-b.border-slate-100 {
+    border-bottom: 2px solid #e5e7eb !important;
+    margin-bottom: 16px !important;
+    padding-bottom: 16px !important;
+  }
+
+  /* Links styling */
+  a {
+    text-decoration: none !important;
+    color: black !important;
+  }
+
+  /* Print header - show destination prominently */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #1e40af;
+  }
+
+  .print-header h1 {
+    font-size: 24pt !important;
+    font-weight: bold !important;
+    margin-bottom: 8px !important;
+  }
+
+  .print-header p {
+    font-size: 12pt !important;
+    color: #4b5563 !important;
+  }
+}
