@@ -180,7 +180,10 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
             </span>
           </div>
           
-          <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-2 line-clamp-1">
+          <h4 className={cn(
+            "font-semibold text-slate-800 dark:text-slate-100 mb-2",
+            isSelected ? "" : "line-clamp-1"
+          )}>
             {activity.name}
           </h4>
 
@@ -196,7 +199,13 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
 
           {/* תיאור */}
           {activity.description && (
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-3" title={activity.description}>
+            <p 
+              className={cn(
+                "text-sm text-muted-foreground mb-3 transition-all duration-300",
+                isSelected ? "" : "line-clamp-3"
+              )} 
+              title={activity.description}
+            >
               {activity.description}
             </p>
           )}
@@ -209,7 +218,7 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
             </div>
             <div className="flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 text-blue-500" />
-              <span className="line-clamp-1">{activity.address}</span>
+              <span className={cn(isSelected ? "" : "line-clamp-1")}>{activity.address}</span>
             </div>
           </div>
         </div>
