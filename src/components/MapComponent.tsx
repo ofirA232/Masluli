@@ -59,7 +59,7 @@ const MapComponent = ({ activities, selectedActivityId }: MapComponentProps) => 
   const zoom = selectedActivity ? 15 : 13;
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-[400px]">
+    <div ref={containerRef} className="w-full h-full min-h-[400px] print:hidden">
       <Map
         center={center}
         zoom={zoom}
