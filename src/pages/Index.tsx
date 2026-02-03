@@ -35,7 +35,13 @@ const Index = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div dir="rtl" className="flex min-h-screen bg-background">
+      <TravelSidebar 
+        onGenerate={generateItinerary} 
+        isLoading={isLoading}
+        user={user}
+        onSignOut={handleSignOut}
+      />
       <MainContent 
         itinerary={itinerary} 
         isLoading={isLoading} 
@@ -45,12 +51,6 @@ const Index = () => {
         onSwapActivity={swapActivity}
         destination={lastRequest?.destination}
         showSaveButton={!!itinerary && !!user}
-      />
-      <TravelSidebar 
-        onGenerate={generateItinerary} 
-        isLoading={isLoading}
-        user={user}
-        onSignOut={handleSignOut}
       />
     </div>
   );
