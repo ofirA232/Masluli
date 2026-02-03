@@ -55,13 +55,6 @@ const Index = () => {
       {isMobile && (
         <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
           <div className="flex items-center justify-between h-14 px-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-primary rounded-lg">
-                <Plane className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="font-semibold text-foreground">מתכנן הטיולים</span>
-            </div>
-            
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -77,6 +70,13 @@ const Index = () => {
                 />
               </SheetContent>
             </Sheet>
+            
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-foreground">מתכנן הטיולים</span>
+              <div className="p-1.5 bg-primary rounded-lg">
+                <Plane className="h-5 w-5 text-primary-foreground" />
+              </div>
+            </div>
           </div>
         </header>
       )}
