@@ -19,6 +19,7 @@ export type Database = {
           created_at: string
           destination: string
           id: string
+          share_token: string | null
           trip_data: Json
           user_email: string | null
           user_id: string | null
@@ -27,6 +28,7 @@ export type Database = {
           created_at?: string
           destination: string
           id?: string
+          share_token?: string | null
           trip_data: Json
           user_email?: string | null
           user_id?: string | null
@@ -35,6 +37,7 @@ export type Database = {
           created_at?: string
           destination?: string
           id?: string
+          share_token?: string | null
           trip_data?: Json
           user_email?: string | null
           user_id?: string | null
@@ -46,7 +49,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_share_token: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
