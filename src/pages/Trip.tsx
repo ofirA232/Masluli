@@ -273,6 +273,7 @@ const Trip = () => {
                               dayNumber={day.day_number}
                               isSelected={selectedActivityId === activity.id}
                               onClick={() => handleActivitySelect(activity.id)}
+                              destination={trip.destination}
                             />
                           </div>
                         ))}

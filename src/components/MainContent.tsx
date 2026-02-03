@@ -380,6 +380,7 @@ export function MainContent({
                                     onSwap={onSwapActivity}
                                     isSelected={selectedActivityId === activity.id}
                                     onClick={() => handleActivitySelect(activity.id)}
+                                    destination={destination}
                                   />
                                 </div>
                               ))}
