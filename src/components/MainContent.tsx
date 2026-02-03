@@ -160,14 +160,14 @@ export function MainContent({
   const hasCoordinates = mapActivities.length > 0;
 
   return (
-    <main className="flex-1 min-h-screen bg-slate-50 dark:bg-background overflow-hidden">
+    <main className="flex-1 min-h-0 bg-slate-50 dark:bg-background overflow-hidden">
       {/* Welcome/Loading state - full width */}
       {(showWelcome || isLoading || error) && (
-        <div className="p-8 overflow-y-auto h-full">
+        <div className="p-4 md:p-8 overflow-y-auto h-full">
           <div className="max-w-4xl mx-auto">
             {/* אזור כותרת */}
-            <div className="text-center mb-12 pt-8">
-              <h2 className="text-4xl font-bold text-slate-800 dark:text-foreground mb-4">
+            <div className="text-center mb-8 md:mb-12 pt-4 md:pt-8">
+              <h2 className="text-2xl md:text-4xl font-bold text-slate-800 dark:text-foreground mb-3 md:mb-4">
                 {showWelcome 
                   ? "לאן ההרפתקה הבאה שלך תיקח אותך?"
                   : isLoading 
@@ -175,7 +175,7 @@ export function MainContent({
                     : "המסלול שלך מוכן! 🎉"
                 }
               </h2>
-              <p className="text-lg text-slate-600 dark:text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-base md:text-lg text-slate-600 dark:text-muted-foreground max-w-2xl mx-auto px-2">
                 {showWelcome 
                   ? "מלא את פרטי הטיול שלך ותן לנו ליצור עבורך את המסלול המושלם בהתבסס על תחומי העניין וסגנון הנסיעה שלך."
                   : isLoading
@@ -187,14 +187,14 @@ export function MainContent({
 
             {/* כרטיסי תכונות - רק במצב ברוכים הבאים */}
             {showWelcome && (
-              <div className="grid md:grid-cols-3 gap-6 mb-12">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-12">
                 {features.map((feature) => (
                   <Card key={feature.title} className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-slate-200 dark:border-border bg-white dark:bg-card">
-                    <CardContent className="pt-6">
-                      <div className="p-3 bg-blue-50 dark:bg-primary/10 rounded-xl w-fit mb-4 group-hover:bg-blue-100 dark:group-hover:bg-primary/20 transition-colors">
-                        <feature.icon className="h-6 w-6 text-blue-600 dark:text-primary" />
+                    <CardContent className="pt-4 md:pt-6 pb-4">
+                      <div className="p-2.5 md:p-3 bg-blue-50 dark:bg-primary/10 rounded-xl w-fit mb-3 md:mb-4 group-hover:bg-blue-100 dark:group-hover:bg-primary/20 transition-colors">
+                        <feature.icon className="h-5 w-5 md:h-6 md:w-6 text-blue-600 dark:text-primary" />
                       </div>
-                      <h3 className="font-semibold text-lg text-slate-800 dark:text-card-foreground mb-2">
+                      <h3 className="font-semibold text-base md:text-lg text-slate-800 dark:text-card-foreground mb-1.5 md:mb-2">
                         {feature.title}
                       </h3>
                       <p className="text-slate-500 dark:text-muted-foreground text-sm">
@@ -264,7 +264,7 @@ export function MainContent({
               <Button
                 variant={!showMapOnMobile ? "default" : "outline"}
                 size="sm"
-                className="flex-1"
+                className="flex-1 h-10"
                 onClick={() => setShowMapOnMobile(false)}
               >
                 <List className="h-4 w-4 ms-2" />
@@ -273,7 +273,7 @@ export function MainContent({
               <Button
                 variant={showMapOnMobile ? "default" : "outline"}
                 size="sm"
-                className="flex-1"
+                className="flex-1 h-10"
                 onClick={() => setShowMapOnMobile(true)}
               >
                 <MapPin className="h-4 w-4 ms-2" />
@@ -292,7 +292,7 @@ export function MainContent({
               {/* Itinerary List - 7 cols on desktop with map, full otherwise */}
               <div 
                 className={cn(
-                  "overflow-y-auto p-6",
+                  "overflow-y-auto p-3 md:p-6",
                   !isMobile && hasCoordinates && "col-span-7",
                   !isMobile && !hasCoordinates && "flex-1",
                   isMobile && showMapOnMobile && "hidden",
@@ -306,33 +306,25 @@ export function MainContent({
                 </header>
                 
                 <Card className="border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm">
-                  <CardHeader className="pb-4 border-b border-slate-100 dark:border-border print:border-0">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle className="text-2xl font-bold text-slate-800 dark:text-card-foreground flex items-center gap-3 print:hidden">
-                        <div className="p-2 bg-blue-50 dark:bg-primary/10 rounded-lg">
-                          <MapIcon className="h-5 w-5 text-blue-600 dark:text-primary" />
+                  <CardHeader className="p-3 md:pb-4 md:px-6 md:pt-6 border-b border-slate-100 dark:border-border print:border-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <CardTitle className="text-lg md:text-2xl font-bold text-slate-800 dark:text-card-foreground flex items-center gap-2 md:gap-3 print:hidden">
+                        <div className="p-1.5 md:p-2 bg-blue-50 dark:bg-primary/10 rounded-lg">
+                          <MapIcon className="h-4 w-4 md:h-5 md:w-5 text-blue-600 dark:text-primary" />
                         </div>
                         מסלול הטיול שלך
-                      </CardTitle>
-                      <div className="flex items-center gap-2 flex-wrap print:hidden">
-                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">
+                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 text-xs md:text-sm">
                           {numberOfDays} ימים
                         </Badge>
-                        <Button
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => window.print()}
-                          className="print:hidden"
-                        >
-                          <Printer className="h-4 w-4 ms-1" />
-                          הדפס / PDF
-                        </Button>
+                      </CardTitle>
+                      <div className="flex items-center gap-2 flex-wrap print:hidden">
                         {showSaveButton && (
                           <Button 
                             variant="default" 
                             size="sm" 
                             onClick={handleSaveTrip}
                             disabled={isSaving}
+                            className="flex-1 md:flex-none"
                           >
                             {isSaving ? (
                               <Loader2 className="h-4 w-4 ms-1 animate-spin" />
@@ -342,29 +334,38 @@ export function MainContent({
                             {isSaving ? "שומר..." : "שמור טיול"}
                           </Button>
                         )}
+                        <Button
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => window.print()}
+                          className="print:hidden hidden md:flex"
+                        >
+                          <Printer className="h-4 w-4 ms-1" />
+                          הדפס / PDF
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={onReset} className="print:hidden">
                           <RotateCcw className="h-4 w-4 ms-1" />
-                          מסלול חדש
+                          <span className="hidden md:inline">מסלול חדש</span>
                         </Button>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-6">
-                    <ScrollArea className="h-[calc(100vh-280px)] pe-4">
-                      <div className="space-y-8">
+                  <CardContent className="p-3 md:pt-6 md:px-6">
+                    <ScrollArea className="h-[calc(100vh-220px)] md:h-[calc(100vh-280px)] pe-2 md:pe-4">
+                      <div className="space-y-6 md:space-y-8">
                         {itinerary.days.map((day) => (
                           <div key={day.day_number}>
                             {/* כותרת יום */}
-                            <div className="sticky top-0 bg-white dark:bg-card z-10 pb-4 pt-1">
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-blue-600 dark:bg-primary flex items-center justify-center text-white dark:text-primary-foreground font-bold shadow-md">
+                            <div className="sticky top-0 bg-white dark:bg-card z-10 pb-3 md:pb-4 pt-1">
+                              <div className="flex items-center gap-2 md:gap-3">
+                                <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-blue-600 dark:bg-primary flex items-center justify-center text-white dark:text-primary-foreground font-bold shadow-md text-sm md:text-base">
                                   {day.day_number}
                                 </div>
                                 <div>
-                                  <h3 className="font-semibold text-lg text-slate-800 dark:text-card-foreground">
+                                  <h3 className="font-semibold text-base md:text-lg text-slate-800 dark:text-card-foreground">
                                     יום {day.day_number}
                                   </h3>
-                                  <p className="text-sm text-slate-500 dark:text-muted-foreground">
+                                  <p className="text-xs md:text-sm text-slate-500 dark:text-muted-foreground">
                                     {day.activities.length} פעילויות
                                   </p>
                                 </div>
@@ -372,7 +373,7 @@ export function MainContent({
                             </div>
 
                             {/* פעילויות היום */}
-                            <div className="space-y-3 ps-5 border-s-2 border-blue-100 dark:border-border ms-5">
+                            <div className="space-y-2 md:space-y-3 ps-4 md:ps-5 border-s-2 border-blue-100 dark:border-border ms-4 md:ms-5">
                               {day.activities.map((activity, index) => (
                                 <div 
                                   key={activity.id || index} 
@@ -385,8 +386,8 @@ export function MainContent({
                                   onMouseLeave={() => handleActivityHover(null)}
                                 >
                                   {/* קו מחבר */}
-                                  <div className="absolute -start-[25px] top-8 w-4 h-0.5 bg-blue-100 dark:bg-border" />
-                                  <div className="absolute -start-[29px] top-7 w-3 h-3 rounded-full bg-blue-100 dark:bg-primary/20 border-2 border-blue-400 dark:border-primary" />
+                                  <div className="absolute -start-[21px] md:-start-[25px] top-6 md:top-8 w-3 md:w-4 h-0.5 bg-blue-100 dark:bg-border" />
+                                  <div className="absolute -start-[25px] md:-start-[29px] top-5 md:top-7 w-2.5 md:w-3 h-2.5 md:h-3 rounded-full bg-blue-100 dark:bg-primary/20 border-2 border-blue-400 dark:border-primary" />
                                   
                                   <ActivityCard 
                                     activity={activity} 
