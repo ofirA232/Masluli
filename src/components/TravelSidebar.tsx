@@ -81,7 +81,7 @@ export function TravelSidebar({ onGenerate, isLoading, user, onSignOut }: Travel
   };
 
   return (
-    <aside className="w-80 shrink-0 bg-sidebar border-s border-sidebar-border p-6 overflow-y-auto flex flex-col print:hidden">
+    <aside className="w-full md:w-80 shrink-0 bg-sidebar border-s border-sidebar-border p-6 overflow-y-auto flex flex-col print:hidden h-full">
       {/* User Section */}
       <div className="mb-4">
         {user ? (
