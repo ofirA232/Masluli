@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Compass, Map as MapIcon, Sparkles, RotateCcw, Loader2, Save, MapPin, List } from "lucide-react";
+import { Compass, Map as MapIcon, Sparkles, RotateCcw, Loader2, Save, MapPin, List, Printer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -299,19 +299,34 @@ export function MainContent({
                   isMobile && !showMapOnMobile && "h-full"
                 )}
               >
+                {/* Print Header - only visible when printing */}
+                <header className="print-header hidden print:block">
+                  <h1>{destination || "מסלול הטיול שלך"}</h1>
+                  <p>{numberOfDays} ימים • נוצר על ידי מתכנן הטיולים החכם</p>
+                </header>
+                
                 <Card className="border-slate-200 dark:border-border bg-white dark:bg-card shadow-sm">
-                  <CardHeader className="pb-4 border-b border-slate-100 dark:border-border">
+                  <CardHeader className="pb-4 border-b border-slate-100 dark:border-border print:border-0">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle className="text-2xl font-bold text-slate-800 dark:text-card-foreground flex items-center gap-3">
+                      <CardTitle className="text-2xl font-bold text-slate-800 dark:text-card-foreground flex items-center gap-3 print:hidden">
                         <div className="p-2 bg-blue-50 dark:bg-primary/10 rounded-lg">
                           <MapIcon className="h-5 w-5 text-blue-600 dark:text-primary" />
                         </div>
                         מסלול הטיול שלך
                       </CardTitle>
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap print:hidden">
                         <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0">
                           {numberOfDays} ימים
                         </Badge>
+                        <Button
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => window.print()}
+                          className="print:hidden"
+                        >
+                          <Printer className="h-4 w-4 ms-1" />
+                          הדפס / PDF
+                        </Button>
                         {showSaveButton && (
                           <Button 
                             variant="default" 
@@ -327,7 +342,7 @@ export function MainContent({
                             {isSaving ? "שומר..." : "שמור טיול"}
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" onClick={onReset}>
+                        <Button variant="ghost" size="sm" onClick={onReset} className="print:hidden">
                           <RotateCcw className="h-4 w-4 ms-1" />
                           מסלול חדש
                         </Button>
