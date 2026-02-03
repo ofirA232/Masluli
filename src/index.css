@@ -146,28 +146,50 @@ All colors MUST be HSL.
     direction: rtl;
   }
 
-  /* Hide sidebar, map, navbar, all buttons */
+  /* Tailwind print:hidden utility support */
+  .print\\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Hide sidebar explicitly */
+  aside,
   [data-sidebar],
   .sidebar,
+  .w-80.shrink-0 {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+  }
+
+  /* Hide map and navigation */
   nav,
   header:not(.print-header),
+  .col-span-5,
+  [class*="MapComponent"],
+  [class*="pigeon"],
+  .pigeon-tiles-box {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Hide all buttons */
   button,
   [role="button"],
-  .print\\:hidden,
-  /* Map components */
-  [class*="MapComponent"],
-  [class*="pigeon-map"],
-  .pigeon-tiles-box,
-  /* Mobile toggle buttons */
-  .flex.border-b.border-border.bg-card,
-  /* Map column in grid */
-  .col-span-5,
-  /* Scroll indicators */
-  [class*="scrollbar"],
-  /* Action buttons on cards */
   .absolute.top-2.left-2 {
     display: none !important;
     visibility: hidden !important;
+  }
+
+  /* Mobile toggle buttons */
+  .flex.border-b.border-border.bg-card {
+    display: none !important;
+  }
+
+  /* Main layout - full width */
+  .flex.min-h-screen,
+  [dir="rtl"].flex.min-h-screen {
+    display: block !important;
   }
 
   /* Make itinerary full width */
@@ -183,7 +205,7 @@ All colors MUST be HSL.
     display: block !important;
   }
 
-  /* Remove shadows and borders for clean print */
+  /* Remove shadows for clean print */
   .shadow-sm,
   .shadow-md,
   .shadow-lg {
@@ -285,10 +307,6 @@ All colors MUST be HSL.
     min-height: auto !important;
   }
 
-  .flex.min-h-screen {
-    display: block !important;
-  }
-
   /* Overflow handling */
   .overflow-hidden,
   .overflow-y-auto,
@@ -304,7 +322,7 @@ All colors MUST be HSL.
     padding: 0 !important;
   }
 
-  /* Card header */
+  /* Card header - hide icon and buttons in header */
   .border-b.border-slate-100 {
     border-bottom: 2px solid #e5e7eb !important;
     margin-bottom: 16px !important;

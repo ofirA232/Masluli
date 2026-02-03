@@ -412,6 +412,7 @@ export function MainContent({
               {hasCoordinates && (
                 <div 
                   className={cn(
+                    "print:hidden",
                     isMobile && !showMapOnMobile && "hidden",
                     isMobile && showMapOnMobile && "h-full",
                     !isMobile && "col-span-5 sticky top-0 h-screen"
