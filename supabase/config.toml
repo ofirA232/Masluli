@@ -1,10 +1,1 @@
-project_id = "jcvmzavzhpbujnidxgux"
-
-[functions.generate-itinerary]
-verify_jwt = false
-
-[functions.unsplash-image]
-verify_jwt = false
-
-[functions.swap-activity]
-verify_jwt = false
+project_id = "hnttslbqkvfzadqiiyza"

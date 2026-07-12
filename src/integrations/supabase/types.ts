@@ -10,46 +10,17 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      trips: {
-        Row: {
-          created_at: string
-          destination: string
-          id: string
-          share_token: string | null
-          trip_data: Json
-          user_email: string | null
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          destination: string
-          id?: string
-          share_token?: string | null
-          trip_data: Json
-          user_email?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          destination?: string
-          id?: string
-          share_token?: string | null
-          trip_data?: Json
-          user_email?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      generate_share_token: { Args: never; Returns: string }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
