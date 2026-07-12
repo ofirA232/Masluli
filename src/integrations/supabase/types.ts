@@ -14,13 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      trips: {
+        Row: {
+          created_at: string
+          destination: string
+          id: string
+          share_token: string | null
+          trip_data: Json
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          destination: string
+          id?: string
+          share_token?: string | null
+          trip_data: Json
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          destination?: string
+          id?: string
+          share_token?: string | null
+          trip_data?: Json
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_share_token: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
