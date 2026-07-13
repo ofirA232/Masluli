@@ -7,6 +7,7 @@ import { Loader2, Menu, Plane } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import type { ItineraryRequest } from "@/types/itinerary";
 
 const Index = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -41,7 +42,7 @@ const Index = () => {
     await signOut();
   };
 
-  const handleGenerate = async (request: any) => {
+  const handleGenerate = async (request: ItineraryRequest) => {
     await generateItinerary(request);
     // Close sidebar on mobile after generating
     if (isMobile) {
@@ -85,8 +86,8 @@ const Index = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Desktop: Show sidebar */}
         {!isMobile && (
-          <TravelSidebar 
-            onGenerate={generateItinerary} 
+          <TravelSidebar
+            onGenerate={handleGenerate}
             isLoading={isLoading}
             user={user}
             onSignOut={handleSignOut}

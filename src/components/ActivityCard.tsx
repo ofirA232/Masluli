@@ -3,11 +3,10 @@ import { MapPin, RefreshCw, DollarSign, Image as ImageIcon, Loader2, Ticket } fr
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { logger } from "@/lib/logger";
 import type { Activity } from "@/types/itinerary";
-import { cn } from "@/lib/utils";
+import { cn, isPaidActivity } from "@/lib/utils";
+import { activityImageTerm, fetchImageUrl } from "@/lib/images";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 // Category to Hebrew label mapping
@@ -19,9 +18,6 @@ const categoryLabels: Record<string, string> = {
   shopping: "קניות",
   entertainment: "בידור",
 };
-
-// Simple in-memory cache for images
-const imageCache = new Map<string, string>();
 
 interface ActivityCardProps {
   activity: Activity;
@@ -41,66 +37,38 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
   
   const categoryLabel = categoryLabels[activity.category] || activity.category;
 
-  // Reset image state when activity changes
   useEffect(() => {
-    setImageUrl(null);
     setImageLoaded(false);
     setImageError(false);
-  }, [activity.id]);
 
-  useEffect(() => {
-    const fetchImage = async () => {
-      // Use image_search_term or fallback to activity name
-      const searchTerm = activity.image_search_term?.trim() || activity.name?.trim();
-      
-      if (!searchTerm) {
-        setImageError(true);
-        return;
-      }
-      
-      // Check cache first
-      if (imageCache.has(searchTerm)) {
-        setImageUrl(imageCache.get(searchTerm)!);
-        return;
-      }
+    // Prefer a persisted URL (set at generation time; works for saved/shared
+    // trips and anonymous viewers without any network round-trip).
+    if (activity.image_url) {
+      setImageUrl(activity.image_url);
+      return;
+    }
 
-      // Check if user is authenticated before making the API call
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        // Not authenticated, use placeholder
-        setImageError(true);
-        return;
-      }
+    setImageUrl(null);
 
-      try {
-        const { data, error } = await supabase.functions.invoke('unsplash-image', {
-          body: { query: searchTerm },
-        });
+    const term = activityImageTerm(activity);
+    if (!term) {
+      setImageError(true);
+      return;
+    }
 
-        if (error) {
-          logger.error('Error fetching Unsplash image:', error);
-          setImageError(true);
-          return;
-        }
+    let cancelled = false;
+    fetchImageUrl(term).then((url) => {
+      if (cancelled) return;
+      if (url) setImageUrl(url);
+      else setImageError(true);
+    });
 
-        if (data?.imageUrl) {
-          imageCache.set(searchTerm, data.imageUrl);
-          setImageUrl(data.imageUrl);
-        } else {
-          setImageError(true);
-        }
-      } catch (err) {
-        logger.error('Error fetching image:', err);
-        setImageError(true);
-      }
+    return () => {
+      cancelled = true;
     };
+  }, [activity.id, activity.image_url, activity.image_search_term, activity.name]);
 
-    fetchImage();
-  }, [activity.image_search_term, activity.name, activity.id]);
-
-  // Check if activity is paid (either is_paid=true or price is not free)
-  const isPaidActivity = activity.is_paid === true || 
-    (activity.price && !activity.price.includes("0") && !activity.price.toLowerCase().includes("free") && !activity.price.includes("חינם"));
+  const isPaid = isPaidActivity(activity);
 
   const handleSwap = async () => {
     if (!onSwap) return;
@@ -144,7 +112,7 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
       {/* כפתורי פעולה */}
       <div className="absolute top-2 left-2 flex gap-1 z-10">
         {/* כפתור קנה כרטיסים */}
-        {isPaidActivity && (
+        {isPaid && (
           <Button
             variant="outline"
             size="icon"
@@ -174,7 +142,7 @@ export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, 
 
       {/* Loading overlay */}
       {isSwapping && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-800/50 rounded-xl z-5">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-800/50 rounded-xl z-[5]">
           <div className="flex flex-col items-center gap-2">
             <Loader2 className="h-5 w-5 md:h-6 md:w-6 animate-spin text-blue-600" />
             <span className="text-xs md:text-sm text-slate-600 dark:text-slate-400">מחפש חלופה...</span>

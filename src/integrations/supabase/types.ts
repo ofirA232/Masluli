@@ -50,6 +50,10 @@ export type Database = {
     }
     Functions: {
       generate_share_token: { Args: never; Returns: string }
+      get_shared_trip: {
+        Args: { token: string }
+        Returns: Database["public"]["Tables"]["trips"]["Row"][]
+      }
     }
     Enums: {
       [_ in never]: never

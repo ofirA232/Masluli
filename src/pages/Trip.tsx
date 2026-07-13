@@ -14,6 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Itinerary } from "@/types/itinerary";
+import type { Tables } from "@/integrations/supabase/types";
+
+type TripRow = Tables<"trips">;
 
 interface TripData {
   id: string;
@@ -128,24 +131,38 @@ const Trip = () => {
       }
 
       try {
-        // Build query - if share_token provided, use it for RLS policy
-        let query = supabase
-          .from("trips")
-          .select("*")
-          .eq("id", id);
-        
-        // If share token is provided in URL, we need to pass it to the query context
-        // The RLS policy will check current_setting('request.query.share_token')
+        let data: TripRow | null = null;
+
         if (shareToken) {
-          query = query.eq("share_token", shareToken);
-        }
+          // Public share link: resolve the trip via a SECURITY DEFINER RPC that
+          // looks it up by the unguessable token, bypassing RLS safely.
+          const { data: rows, error: rpcError } = await supabase.rpc(
+            "get_shared_trip",
+            { token: shareToken },
+          );
 
-        const { data, error: fetchError } = await query.maybeSingle();
+          if (rpcError) {
+            logger.error("Error fetching shared trip:", rpcError);
+            setError("שגיאה בטעינת הטיול");
+            return;
+          }
 
-        if (fetchError) {
-          logger.error("Error fetching trip:", fetchError);
-          setError("שגיאה בטעינת הטיול");
-          return;
+          data = (rows ?? []).find((t) => t.id === id) ?? null;
+        } else {
+          // Owner view: RLS restricts this to the authenticated owner's rows.
+          const { data: row, error: fetchError } = await supabase
+            .from("trips")
+            .select("*")
+            .eq("id", id)
+            .maybeSingle();
+
+          if (fetchError) {
+            logger.error("Error fetching trip:", fetchError);
+            setError("שגיאה בטעינת הטיול");
+            return;
+          }
+
+          data = row;
         }
 
         if (!data) {

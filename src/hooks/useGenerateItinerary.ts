@@ -1,10 +1,8 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
+import { enrichItineraryWithImages, fetchImageUrl } from '@/lib/images';
 import type { Itinerary, ItineraryRequest, Activity } from '@/types/itinerary';
-
-// Simple in-memory cache for images
-const imageCache = new Map<string, string>();
 
 // Helper to get time slot from activity time
 function getTimeSlot(time: string): string {
@@ -18,37 +16,6 @@ function getTimeSlot(time: string): string {
 async function checkAuth(): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
   return !!session;
-}
-
-// Helper to fetch image for an activity
-async function fetchActivityImage(searchTerm: string): Promise<string | null> {
-  if (!searchTerm) return null;
-  
-  // Check cache first
-  if (imageCache.has(searchTerm)) {
-    return imageCache.get(searchTerm)!;
-  }
-
-  // Check auth before making request
-  const isAuthenticated = await checkAuth();
-  if (!isAuthenticated) {
-    return null;
-  }
-
-  try {
-    const { data, error } = await supabase.functions.invoke('unsplash-image', {
-      body: { query: searchTerm },
-    });
-
-    if (error || !data?.imageUrl) {
-      return null;
-    }
-
-    imageCache.set(searchTerm, data.imageUrl);
-    return data.imageUrl;
-  } catch {
-    return null;
-  }
 }
 
 export function useGenerateItinerary() {
@@ -87,8 +54,11 @@ export function useGenerateItinerary() {
         throw new Error(data.error);
       }
 
-      setItinerary(data);
-      return data;
+      // Resolve activity images once and embed them so they persist with the
+      // trip (survive reload, visible to shared/anonymous viewers).
+      const enriched = await enrichItineraryWithImages(data as Itinerary);
+      setItinerary(enriched);
+      return enriched;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'שגיאה ביצירת המסלול';
       setError(errorMessage);
@@ -152,12 +122,12 @@ export function useGenerateItinerary() {
       // Ensure the new activity has a unique ID
       const newActivity: Activity = {
         ...data,
-        id: data.id || `swap-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: data.id || `swap-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       };
 
-      // Pre-fetch the image for the new activity
+      // Resolve and embed the image for the new activity so it persists.
       const imageSearchTerm = newActivity.image_search_term || newActivity.name;
-      await fetchActivityImage(imageSearchTerm);
+      newActivity.image_url = await fetchImageUrl(imageSearchTerm);
 
       // Update the itinerary state
       setItinerary(prev => {

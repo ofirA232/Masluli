@@ -108,10 +108,12 @@ const MyTrips = () => {
     }
   };
 
-  // Get the first image from the itinerary for the card background
+  // Get the first activity's persisted image URL for the card background.
   const getFirstImage = (itinerary: Itinerary): string | null => {
-    if (itinerary?.days?.[0]?.activities?.[0]?.image_search_term) {
-      return itinerary.days[0].activities[0].image_search_term;
+    for (const day of itinerary?.days ?? []) {
+      for (const activity of day.activities ?? []) {
+        if (activity.image_url) return activity.image_url;
+      }
     }
     return null;
   };
@@ -201,14 +203,17 @@ const MyTrips = () => {
                   onClick={() => navigate(`/trip/${trip.id}`)}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10" />
-                  {getFirstImage(trip.trip_data) && (
+                  {getFirstImage(trip.trip_data) ? (
                     <img
-                      src={`https://source.unsplash.com/400x300/?${encodeURIComponent(getFirstImage(trip.trip_data) || trip.destination)}`}
+                      src={getFirstImage(trip.trip_data) || ""}
                       alt={trip.destination}
+                      loading="lazy"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
                     />
-                  )}
-                  {!getFirstImage(trip.trip_data) && (
+                  ) : (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <MapPin className="h-12 w-12 text-primary/40" />
                     </div>
