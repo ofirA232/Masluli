@@ -95,17 +95,6 @@ interface ItineraryRequest {
   interests?: string[];
 }
 
-// Carries an HTTP status through a thrown error so parallel chunk generation
-// can surface AI service errors (rate limit / upstream failure) to the client.
-class AiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'AiError';
-    this.status = status;
-  }
-}
-
 // Validation constants
 const MAX_DESTINATION_LENGTH = 100;
 const MAX_BUDGET_LENGTH = 50;
@@ -367,9 +356,6 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
           messages: [{ role: 'user', content: `${systemPromptText}\n\n${userPromptText}` }],
           temperature: 0.2,
           max_tokens: 8000,
-          // Ask the model for a JSON object directly; the repair logic below
-          // stays as a fallback in case the model ignores the hint.
-          response_format: { type: 'json_object' },
         }),
       });
 
@@ -449,23 +435,19 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       }
     };
 
-    // For long trips, generate in chunks to avoid AI truncation (which breaks
-    // JSON). The chunks are independent, so run them with bounded concurrency
-    // (below) to cut wall-clock time versus the old serial loop.
+    // For long trips, generate in chunks to avoid AI truncation (which breaks JSON)
     const CHUNK_DAYS = 5;
-    const chunkStarts: number[] = [];
-    for (let startDay = 1; startDay <= numberOfDays; startDay += CHUNK_DAYS) {
-      chunkStarts.push(startDay);
-    }
+    const mergedDays: Day[] = [];
 
-    const generateChunk = async (startDay: number): Promise<Day[]> => {
+    for (let startDay = 1; startDay <= numberOfDays; startDay += CHUNK_DAYS) {
       const daysInChunk = Math.min(CHUNK_DAYS, numberOfDays - startDay + 1);
       const chunkLabel = `chunk ${startDay}-${startDay + daysInChunk - 1}`;
 
       const systemPrompt = buildSystemPrompt(daysInChunk, startDay);
       const baseUserPrompt = buildUserPrompt(daysInChunk, startDay);
 
-      // Retry once if the model returns invalid JSON.
+      // Retry once if the model returns invalid JSON
+      let parsed = false;
       for (let attempt = 1; attempt <= 2; attempt++) {
         const userPrompt =
           attempt === 1
@@ -474,52 +456,29 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
 
         const aiResult = await callAi(systemPrompt, userPrompt);
         if (!aiResult.ok) {
-          // HTTP-level AI errors are not retried; propagate the status.
-          throw new AiError(aiResult.status, aiResult.error);
+          return new Response(JSON.stringify({ error: aiResult.error }), {
+            status: aiResult.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
 
         try {
-          return parseItineraryFromContent(aiResult.content, chunkLabel).days;
+          const chunkItinerary = parseItineraryFromContent(aiResult.content, chunkLabel);
+          mergedDays.push(...chunkItinerary.days);
+          parsed = true;
+          break;
         } catch (e) {
           console.warn('Chunk JSON parse failed, retrying:', chunkLabel, 'attempt', attempt);
           if (attempt === 2) throw e;
         }
       }
 
-      // Unreachable (loop either returns or throws), but keeps the type checker happy.
-      throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
-    };
-
-    // Run chunks with bounded concurrency. Each worker captures its own errors
-    // so no rejection is ever left unhandled (an unhandled rejection would crash
-    // the edge worker). A modest cap also avoids bursting OpenRouter with too
-    // many simultaneous requests (which can trigger 429s).
-    const CONCURRENCY = 3;
-    const settled: PromiseSettledResult<Day[]>[] = new Array(chunkStarts.length);
-    let nextIndex = 0;
-    const worker = async () => {
-      while (nextIndex < chunkStarts.length) {
-        const i = nextIndex++;
-        try {
-          settled[i] = { status: 'fulfilled', value: await generateChunk(chunkStarts[i]) };
-        } catch (reason) {
-          settled[i] = { status: 'rejected', reason };
-        }
+      if (!parsed) {
+        throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
       }
-    };
-    await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, chunkStarts.length) }, worker),
-    );
-
-    // Surface the first failure (if any) as a normal error response.
-    const firstFailure = settled.find((r) => r?.status === 'rejected');
-    if (firstFailure && firstFailure.status === 'rejected') {
-      throw firstFailure.reason;
     }
 
-    const mergedDays: Day[] = settled
-      .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
-      .sort((a, b) => a.day_number - b.day_number);
+    mergedDays.sort((a, b) => a.day_number - b.day_number);
 
     return new Response(JSON.stringify({ days: mergedDays }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -527,19 +486,13 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
 
   } catch (error) {
     console.error('Error generating itinerary:', error instanceof Error ? error.message : 'Unknown error');
-
-    // Surface AI service errors with their status; keep everything else generic
-    // so internal details (e.g. a missing API key) never reach the client.
-    if (error instanceof AiError) {
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: error.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate itinerary';
     return new Response(
-      JSON.stringify({ error: 'שגיאה ביצירת המסלול, נסה שוב' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: errorMessage }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
   }
 });
