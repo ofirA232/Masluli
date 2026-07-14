@@ -450,8 +450,8 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
     };
 
     // For long trips, generate in chunks to avoid AI truncation (which breaks
-    // JSON). The chunks are independent, so run them in parallel to cut
-    // wall-clock time (a 30-day trip is 6 chunks: ~6x faster than serial).
+    // JSON). The chunks are independent, so run them with bounded concurrency
+    // (below) to cut wall-clock time versus the old serial loop.
     const CHUNK_DAYS = 5;
     const chunkStarts: number[] = [];
     for (let startDay = 1; startDay <= numberOfDays; startDay += CHUNK_DAYS) {
@@ -490,9 +490,35 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
     };
 
-    const chunkResults = await Promise.all(chunkStarts.map(generateChunk));
-    const mergedDays: Day[] = chunkResults
-      .flat()
+    // Run chunks with bounded concurrency. Each worker captures its own errors
+    // so no rejection is ever left unhandled (an unhandled rejection would crash
+    // the edge worker). A modest cap also avoids bursting OpenRouter with too
+    // many simultaneous requests (which can trigger 429s).
+    const CONCURRENCY = 3;
+    const settled: PromiseSettledResult<Day[]>[] = new Array(chunkStarts.length);
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < chunkStarts.length) {
+        const i = nextIndex++;
+        try {
+          settled[i] = { status: 'fulfilled', value: await generateChunk(chunkStarts[i]) };
+        } catch (reason) {
+          settled[i] = { status: 'rejected', reason };
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, chunkStarts.length) }, worker),
+    );
+
+    // Surface the first failure (if any) as a normal error response.
+    const firstFailure = settled.find((r) => r?.status === 'rejected');
+    if (firstFailure && firstFailure.status === 'rejected') {
+      throw firstFailure.reason;
+    }
+
+    const mergedDays: Day[] = settled
+      .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
       .sort((a, b) => a.day_number - b.day_number);
 
     return new Response(JSON.stringify({ days: mergedDays }), {
