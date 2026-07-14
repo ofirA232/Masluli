@@ -258,6 +258,9 @@ Provide a single activity that fits the time slot and interests.`;
         ],
         temperature: 0.8,
         max_tokens: 1000,
+        // Request a JSON object directly; the markdown-stripping fallback below
+        // still handles models that ignore the hint.
+        response_format: { type: 'json_object' },
       }),
     });
 

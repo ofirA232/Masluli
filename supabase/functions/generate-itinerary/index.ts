@@ -95,6 +95,17 @@ interface ItineraryRequest {
   interests?: string[];
 }
 
+// Carries an HTTP status through a thrown error so parallel chunk generation
+// can surface AI service errors (rate limit / upstream failure) to the client.
+class AiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'AiError';
+    this.status = status;
+  }
+}
+
 // Validation constants
 const MAX_DESTINATION_LENGTH = 100;
 const MAX_BUDGET_LENGTH = 50;
@@ -356,6 +367,9 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
           messages: [{ role: 'user', content: `${systemPromptText}\n\n${userPromptText}` }],
           temperature: 0.2,
           max_tokens: 8000,
+          // Ask the model for a JSON object directly; the repair logic below
+          // stays as a fallback in case the model ignores the hint.
+          response_format: { type: 'json_object' },
         }),
       });
 
@@ -435,19 +449,23 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
       }
     };
 
-    // For long trips, generate in chunks to avoid AI truncation (which breaks JSON)
+    // For long trips, generate in chunks to avoid AI truncation (which breaks
+    // JSON). The chunks are independent, so run them in parallel to cut
+    // wall-clock time (a 30-day trip is 6 chunks: ~6x faster than serial).
     const CHUNK_DAYS = 5;
-    const mergedDays: Day[] = [];
-
+    const chunkStarts: number[] = [];
     for (let startDay = 1; startDay <= numberOfDays; startDay += CHUNK_DAYS) {
+      chunkStarts.push(startDay);
+    }
+
+    const generateChunk = async (startDay: number): Promise<Day[]> => {
       const daysInChunk = Math.min(CHUNK_DAYS, numberOfDays - startDay + 1);
       const chunkLabel = `chunk ${startDay}-${startDay + daysInChunk - 1}`;
 
       const systemPrompt = buildSystemPrompt(daysInChunk, startDay);
       const baseUserPrompt = buildUserPrompt(daysInChunk, startDay);
 
-      // Retry once if the model returns invalid JSON
-      let parsed = false;
+      // Retry once if the model returns invalid JSON.
       for (let attempt = 1; attempt <= 2; attempt++) {
         const userPrompt =
           attempt === 1
@@ -456,29 +474,26 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
 
         const aiResult = await callAi(systemPrompt, userPrompt);
         if (!aiResult.ok) {
-          return new Response(JSON.stringify({ error: aiResult.error }), {
-            status: aiResult.status,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          // HTTP-level AI errors are not retried; propagate the status.
+          throw new AiError(aiResult.status, aiResult.error);
         }
 
         try {
-          const chunkItinerary = parseItineraryFromContent(aiResult.content, chunkLabel);
-          mergedDays.push(...chunkItinerary.days);
-          parsed = true;
-          break;
+          return parseItineraryFromContent(aiResult.content, chunkLabel).days;
         } catch (e) {
           console.warn('Chunk JSON parse failed, retrying:', chunkLabel, 'attempt', attempt);
           if (attempt === 2) throw e;
         }
       }
 
-      if (!parsed) {
-        throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
-      }
-    }
+      // Unreachable (loop either returns or throws), but keeps the type checker happy.
+      throw new Error('שגיאה בעיבוד תשובת ה-AI, נסה שוב');
+    };
 
-    mergedDays.sort((a, b) => a.day_number - b.day_number);
+    const chunkResults = await Promise.all(chunkStarts.map(generateChunk));
+    const mergedDays: Day[] = chunkResults
+      .flat()
+      .sort((a, b) => a.day_number - b.day_number);
 
     return new Response(JSON.stringify({ days: mergedDays }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -486,13 +501,19 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
 
   } catch (error) {
     console.error('Error generating itinerary:', error instanceof Error ? error.message : 'Unknown error');
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate itinerary';
+
+    // Surface AI service errors with their status; keep everything else generic
+    // so internal details (e.g. a missing API key) never reach the client.
+    if (error instanceof AiError) {
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: error.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: 'שגיאה ביצירת המסלול, נסה שוב' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
