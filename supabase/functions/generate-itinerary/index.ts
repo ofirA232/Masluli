@@ -343,21 +343,32 @@ Please provide a detailed day-by-day itinerary with specific activities, times, 
     };
 
     const callAi = async (systemPromptText: string, userPromptText: string) => {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://lovable.dev',
-          'X-Title': 'Trip Planner App',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-lite',
-          messages: [{ role: 'user', content: `${systemPromptText}\n\n${userPromptText}` }],
-          temperature: 0.2,
-          max_tokens: 8000,
-        }),
-      });
+      const doFetch = (jsonMode: boolean) =>
+        fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openRouterApiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://lovable.dev',
+            'X-Title': 'Trip Planner App',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash-lite',
+            messages: [{ role: 'user', content: `${systemPromptText}\n\n${userPromptText}` }],
+            temperature: 0.2,
+            max_tokens: 8000,
+            // Ask for guaranteed-valid JSON to cut down on parse failures.
+            ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+          }),
+        });
+
+      // Prefer structured-output mode; if the param is ever rejected (400),
+      // transparently retry without it so it can only help, never break.
+      let response = await doFetch(true);
+      if (response.status === 400) {
+        console.warn('response_format rejected; retrying without JSON mode');
+        response = await doFetch(false);
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
