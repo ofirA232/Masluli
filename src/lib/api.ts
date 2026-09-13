@@ -48,7 +48,12 @@ export async function savePlan(id: string, revision: number, plan: TripPlan) {
     p_destination: plan.metadata.destination,
     p_data: plan as unknown as Json,
   });
-  if (error?.code === "40001")
+  // PT409 is raised by save_trip; 40001 covers databases not yet migrated.
+  if (
+    error?.code === "PT409" ||
+    error?.code === "40001" ||
+    error?.message?.includes("trip_conflict_or_forbidden")
+  )
     throw new SaveConflict(
       "הטיול השתנה בלשונית אחרת. השינויים שלך נשמרו במכשיר.",
     );
