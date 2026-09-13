@@ -1,256 +1,352 @@
-import { useState, useEffect } from "react";
-import { MapPin, RefreshCw, DollarSign, Image as ImageIcon, Loader2, Ticket } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
-import type { Activity } from "@/types/itinerary";
-import { cn, isPaidActivity } from "@/lib/utils";
-import { activityImageTerm, fetchImageUrl } from "@/lib/images";
-import { useIsMobile } from "@/hooks/use-mobile";
-
-// Category to Hebrew label mapping
-const categoryLabels: Record<string, string> = {
-  attraction: "אטרקציה",
-  restaurant: "מסעדה",
-  transport: "תחבורה",
-  accommodation: "לינה",
-  shopping: "קניות",
-  entertainment: "בידור",
-};
-
-interface ActivityCardProps {
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  GripVertical,
+  MapPin,
+  Clock3,
+  Star,
+  Pencil,
+  ChevronUp,
+  ChevronDown,
+  Bookmark,
+  RefreshCw,
+  Trash2,
+  ExternalLink,
+} from "lucide-react";
+import type {
+  Activity,
+  PlaceDetails,
+  PlacePhoto,
+  TripAccess,
+} from "@/types/itinerary";
+import { categories, money, safeUrl } from "@/lib/trips";
+import { getPlace, getPhoto } from "@/lib/api";
+import { placeCacheFresh } from "@/lib/place-cache";
+// Keep provider data for the session so switching days, tabs or the map
+// does not re-request the same place and photo.
+const SESSION_CACHE = 60 * 60 * 1000;
+import { Button } from "./ui/button";
+interface Props {
   activity: Activity;
-  dayNumber: number;
-  isSwapping?: boolean;
-  onSwap?: (dayNumber: number, activityId: string, activityName: string) => Promise<unknown>;
-  isSelected?: boolean;
-  onClick?: () => void;
-  destination?: string;
+  index: number;
+  color: string;
+  day: number | "saved";
+  dayCount: number;
+  access: TripAccess;
+  readOnly: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  onEdit: () => void;
+  onMove: (day: number | "saved", index?: number) => void;
+  onDelete: () => void;
+  onSwap: () => void;
+  swapping: boolean;
+  onDetails: (place: PlaceDetails) => void;
+  /** Persist freshly fetched Google content into the trip (owner only). */
+  onCache?: (id: string, place: PlaceDetails, photo: PlacePhoto) => void;
 }
-
-export function ActivityCard({ activity, dayNumber, isSwapping = false, onSwap, isSelected = false, onClick, destination }: ActivityCardProps) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const isMobile = useIsMobile();
-  
-  const categoryLabel = categoryLabels[activity.category] || activity.category;
-
+export function ActivityCard({
+  activity: a,
+  index,
+  color,
+  day,
+  dayCount,
+  access,
+  readOnly,
+  selected,
+  onSelect,
+  onEdit,
+  onMove,
+  onDelete,
+  onSwap,
+  swapping,
+  onDetails,
+  onCache,
+}: Props) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: a.id, disabled: readOnly });
+  const visibility = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false),
+    [imageFailed, setImageFailed] = useState(false);
   useEffect(() => {
-    setImageLoaded(false);
-    setImageError(false);
-
-    // Prefer a persisted URL (set at generation time; works for saved/shared
-    // trips and anonymous viewers without any network round-trip).
-    if (activity.image_url) {
-      setImageUrl(activity.image_url);
-      return;
-    }
-
-    setImageUrl(null);
-
-    const term = activityImageTerm(activity);
-    if (!term) {
-      setImageError(true);
-      return;
-    }
-
-    let cancelled = false;
-    fetchImageUrl(term).then((url) => {
-      if (cancelled) return;
-      if (url) setImageUrl(url);
-      else setImageError(true);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activity.id, activity.image_url, activity.image_search_term, activity.name]);
-
-  const isPaid = isPaidActivity(activity);
-
-  const handleSwap = async () => {
-    if (!onSwap) return;
-    
-    try {
-      await onSwap(dayNumber, activity.id, activity.name);
-      toast.success("הפעילות הוחלפה בהצלחה!");
-    } catch (err) {
-      toast.error("שגיאה בהחלפת הפעילות");
-    }
-  };
-
-  const handleBuyTickets = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click
-    
-    let url: string;
-    if (activity.booking_url) {
-      url = activity.booking_url;
-    } else {
-      // Fallback: Google search for tickets
-      const searchQuery = encodeURIComponent(`buy tickets for ${activity.name} ${destination || ''}`);
-      url = `https://www.google.com/search?q=${searchQuery}`;
-    }
-    
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
+    if (!visibility.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "150px" },
+    );
+    observer.observe(visibility.current);
+    return () => observer.disconnect();
+  }, []);
+  const cached = placeCacheFresh(a.google, a.place_id) ? a.google : undefined;
+  const place = useQuery({
+    queryKey: ["place", access.tripId, access.shareToken, a.place_id],
+    queryFn: () => getPlace(a.place_id!, access),
+    enabled: !!a.place_id && visible,
+    initialData: cached?.place,
+    staleTime: Infinity,
+    gcTime: SESSION_CACHE,
+  });
+  const photo = useQuery({
+    queryKey: ["photo", access.tripId, access.shareToken, a.place_id],
+    queryFn: () => getPhoto(a.place_id!, access),
+    enabled: !!a.place_id && visible && !!place.data,
+    initialData: cached?.photo,
+    staleTime: Infinity,
+    gcTime: SESSION_CACHE,
+  });
+  useEffect(() => {
+    if (place.data) onDetails(place.data);
+  }, [place.data, onDetails]);
+  useEffect(() => {
+    if (!cached?.photo && !readOnly && onCache && place.data && photo.data)
+      onCache(a.id, place.data, photo.data);
+  }, [cached, readOnly, onCache, a.id, place.data, photo.data]);
+  const p = place.data,
+    image = photo.data?.url;
+  useEffect(() => setImageFailed(false), [image]);
+  const website = safeUrl(p?.website || a.booking_url);
   return (
-    <div 
-      className={cn(
-        "relative bg-white dark:bg-slate-800 rounded-xl border-2 p-3 md:p-4 transition-all duration-300 cursor-pointer",
-        isSwapping 
-          ? "opacity-50 pointer-events-none border-slate-200 dark:border-slate-700" 
-          : "hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800",
-        isSelected 
-          ? "border-primary ring-2 ring-primary/20 shadow-lg" 
-          : "border-slate-200 dark:border-slate-700"
-      )}
-      onClick={onClick}
+    <article
+      ref={setNodeRef}
+      id={`activity-${a.id}`}
+      className={`activity-card ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
     >
-      {/* כפתורי פעולה */}
-      <div className="absolute top-2 left-2 flex gap-1 z-10">
-        {/* כפתור קנה כרטיסים */}
-        {isPaid && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-7 w-7 md:h-8 md:w-8 text-amber-600 border-amber-200 hover:text-amber-700 hover:bg-amber-50 hover:border-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/20"
-            onClick={handleBuyTickets}
-            title="קנה כרטיסים"
-          >
-            <Ticket className="h-3.5 w-3.5 md:h-4 md:w-4" />
-          </Button>
-        )}
-        
-        {/* כפתור החלפה */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 md:h-8 md:w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-          onClick={(e) => { e.stopPropagation(); handleSwap(); }}
-          disabled={isSwapping || !onSwap}
-        >
-          {isSwapping ? (
-            <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5 md:h-4 md:w-4" />
-          )}
-        </Button>
-      </div>
-
-      {/* Loading overlay */}
-      {isSwapping && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-800/50 rounded-xl z-[5]">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-5 w-5 md:h-6 md:w-6 animate-spin text-blue-600" />
-            <span className="text-xs md:text-sm text-slate-600 dark:text-slate-400">מחפש חלופה...</span>
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-3 md:gap-4">
-        {/* תמונה מ-Unsplash - smaller on mobile */}
-        <div className="w-16 h-16 md:w-24 md:h-24 rounded-lg overflow-hidden shrink-0 border border-slate-100 dark:border-slate-700">
-          {!imageUrl && !imageError && (
-            <Skeleton className="w-full h-full" />
-          )}
-          {imageError || (!imageUrl && imageError) ? (
-            <div className="w-full h-full bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-900/30 dark:to-slate-800 flex items-center justify-center">
-              <ImageIcon className="h-6 w-6 md:h-8 md:w-8 text-blue-300 dark:text-blue-600" />
-            </div>
-          ) : imageUrl ? (
-            <>
-              {!imageLoaded && <Skeleton className="w-full h-full absolute" />}
-              <img
-                src={imageUrl}
-                alt={activity.name}
-                className={cn(
-                  "w-full h-full object-cover transition-opacity duration-300",
-                  imageLoaded ? 'opacity-100' : 'opacity-0'
-                )}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError(true)}
-              />
-            </>
-          ) : null}
-        </div>
-
-        {/* תוכן */}
-        <div className="flex-1 min-w-0">
-          {/* שעה וכותרת */}
-          <div className="flex items-center gap-2 mb-1.5 md:mb-2">
-            <span className="text-xs md:text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-1.5 md:px-2 py-0.5 rounded">
-              {activity.time}
+      <div ref={visibility} className="activity-content">
+        <div className="activity-topline">
+          <span className="category-label">{categories[a.category]}</span>
+          {a.time && (
+            <span className="activity-time">
+              <Clock3 size={12} />
+              {a.time}
             </span>
-          </div>
-          
-          <h4 className={cn(
-            "font-semibold text-slate-800 dark:text-slate-100 mb-1.5 md:mb-2 text-sm md:text-base",
-            isSelected ? "" : "line-clamp-1"
-          )}>
-            {activity.name}
-          </h4>
-
-          {/* תגית קטגוריה */}
-          <div className="flex flex-wrap gap-1 md:gap-1.5 mb-1.5 md:mb-2">
-            <Badge
-              variant="secondary"
-              className="text-[10px] md:text-xs bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 font-normal px-1.5 py-0"
-            >
-              {categoryLabel}
-            </Badge>
-          </div>
-
-          {/* תיאור - hide on mobile unless selected */}
-          {activity.description && (
-            <p 
-              className={cn(
-                "text-xs md:text-sm text-muted-foreground mb-2 md:mb-3 transition-all duration-300",
-                isMobile && !isSelected ? "hidden" : "",
-                isSelected ? "" : "line-clamp-2 md:line-clamp-3"
-              )} 
-              title={activity.description}
-            >
-              {activity.description}
-            </p>
           )}
-
-          {/* פרטים */}
-          <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs md:text-sm text-slate-500 dark:text-slate-400">
-            <div className="flex items-center gap-1">
-              <DollarSign className="h-3 w-3 md:h-3.5 md:w-3.5 text-blue-500" />
-              <span>{activity.price}</span>
-            </div>
-            {(!isMobile || isSelected) && (
-              <div className="flex items-center gap-1">
-                <MapPin className="h-3 w-3 md:h-3.5 md:w-3.5 text-blue-500" />
-                <span className={cn(isSelected ? "" : "line-clamp-1")}>{activity.address}</span>
-              </div>
+          {!readOnly && (
+            <button
+              className="drag-handle"
+              aria-label={`גרירת ${a.name}`}
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical size={17} />
+            </button>
+          )}
+        </div>
+        <div className="activity-main">
+          <button
+            className="stop-number"
+            onClick={onSelect}
+            aria-label="הצגת המקום במפה"
+            style={{ background: color }}
+          >
+            {index + 1}
+          </button>
+          <div className="activity-text">
+            <button className="activity-title" onClick={onSelect}>
+              {p?.name || a.name}
+            </button>
+            {p?.rating !== undefined && (
+              <span className="place-rating">
+                <Star size={12} fill="currentColor" />
+                {p.rating}
+                <small>({p.ratingCount || 0}) · Google Maps</small>
+              </span>
+            )}
+            <p>
+              {a.description ||
+                (a.place_id
+                  ? "עוד מקום ששווה לעצור בו בדרך."
+                  : "הוסיפו הערות ופרטים קטנים שהופכים את הטיול לשלכם.")}
+            </p>
+            {(p?.address || a.address) && (
+              <span className="activity-address">
+                <MapPin size={12} />
+                {p?.address || a.address}
+              </span>
+            )}
+          </div>
+          <div className="activity-photo">
+            {image && !imageFailed ? (
+              <img
+                src={image}
+                alt={p?.name || a.name}
+                loading="lazy"
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <MapPin size={27} />
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-export function ActivityCardSkeleton() {
-  return (
-    <div className="relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 md:p-4">
-      <div className="flex gap-3 md:gap-4">
-        <Skeleton className="w-16 h-16 md:w-24 md:h-24 rounded-lg shrink-0" />
-        <div className="flex-1 space-y-2 md:space-y-3">
-          <Skeleton className="h-4 md:h-5 w-12 md:w-16" />
-          <Skeleton className="h-4 md:h-5 w-3/4" />
-          <Skeleton className="h-3 md:h-4 w-16 md:w-20" />
-          <div className="flex gap-3 md:gap-4">
-            <Skeleton className="h-3 md:h-4 w-12 md:w-16" />
-            <Skeleton className="h-3 md:h-4 w-20 md:w-32 hidden md:block" />
-          </div>
+        {p?.attributions?.map((attr) => (
+          <small key={attr.provider} className="image-credit">
+            <a
+              href={safeUrl(attr.providerUri)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {attr.provider}
+            </a>
+          </small>
+        ))}
+        {p && (
+          <a
+            translate="no"
+            className="provider-credit"
+            href={safeUrl(p.mapsUrl)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Google Maps
+          </a>
+        )}
+        {a.notes && <p className="activity-note">{a.notes}</p>}
+        <div className="activity-bottom">
+          <span className="cost-tag">
+            {a.estimate
+              ? `${money(a.estimate.min)}${a.estimate.max !== a.estimate.min ? "–" + money(a.estimate.max) : ""} · ${a.estimate.basis === "person" ? "לאדם" : "לקבוצה"}`
+              : a.price
+                ? `${a.price} · אומדן לא מאומת`
+                : "עלות עדיין לא ידועה"}
+            {a.estimate?.source === "ai" && " · אומדן AI"}
+          </span>
+          {website && (
+            <a
+              href={website}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link"
+            >
+              אתר המקום <ExternalLink size={12} />
+            </a>
+          )}
         </div>
+        {!a.place_id && a.source !== "manual" && (
+          <div className="verification-note">
+            הצעת AI / מסלול ישן · המקום עדיין לא אומת{" "}
+            {!readOnly && <button onClick={onEdit}>בחירת מקום</button>}
+          </div>
+        )}
+        {a.place_id && a.auto_linked && !readOnly && (
+          <div className="verification-note">
+            קושר אוטומטית לפי השם{p ? ` אל ${p.name}` : ""}. לא המקום הנכון?{" "}
+            <button onClick={onEdit}>החלפת מקום</button>
+          </div>
+        )}
+        {place.error && (
+          <div className="verification-note">
+            {place.error.message}
+            <button onClick={() => void place.refetch()}>ניסיון נוסף</button>
+          </div>
+        )}
+        {selected && p && (
+          <div className="place-expanded">
+            {p.hours && (
+              <details>
+                <summary>שעות פתיחה</summary>
+                {p.hours.map((h) => (
+                  <p key={h}>{h}</p>
+                ))}
+              </details>
+            )}
+            {p.businessStatus === "CLOSED_PERMANENTLY" && (
+              <p className="form-error">לפי Google המקום סגור לצמיתות</p>
+            )}
+            {p.priceLevel && (
+              <p>
+                רמת מחיר:{" "}
+                {{
+                  PRICE_LEVEL_FREE: "חינם",
+                  PRICE_LEVEL_INEXPENSIVE: "נמוכה",
+                  PRICE_LEVEL_MODERATE: "בינונית",
+                  PRICE_LEVEL_EXPENSIVE: "גבוהה",
+                  PRICE_LEVEL_VERY_EXPENSIVE: "גבוהה מאוד",
+                }[p.priceLevel] || "לא ידועה"}{" "}
+                · אינה מחיר כרטיס
+              </p>
+            )}
+            <a
+              href={safeUrl(p.mapsUrl)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link"
+            >
+              פתיחה ב־Google Maps <ExternalLink size={12} />
+            </a>
+          </div>
+        )}
+        {!readOnly && (
+          <div className="activity-actions">
+            <Button variant="ghost" size="sm" onClick={onEdit}>
+              <Pencil size={13} />
+              עריכה
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="העברה למעלה"
+              disabled={index === 0}
+              onClick={() => onMove(day, index - 1)}
+            >
+              <ChevronUp />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="העברה למטה"
+              onClick={() => onMove(day, index + 1)}
+            >
+              <ChevronDown />
+            </Button>
+            <select
+              aria-label={`העברת ${a.name} ליום אחר`}
+              value={day}
+              onChange={(e) =>
+                onMove(
+                  e.target.value === "saved" ? "saved" : Number(e.target.value),
+                )
+              }
+            >
+              <option value="saved">למקומות ששמרתי</option>
+              {Array.from({ length: dayCount }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  יום {i + 1}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="הצעת פעילות חלופית עם AI"
+              disabled={swapping}
+              onClick={onSwap}
+            >
+              <RefreshCw className={swapping ? "animate-spin" : ""} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="הסרת פעילות"
+              onClick={onDelete}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        )}
       </div>
-    </div>
+    </article>
   );
 }

@@ -1,284 +1,206 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Loader2, MapPin, Calendar, Home, Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "react-router-dom";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
-import { logger } from "@/lib/logger";
-import type { Itinerary } from "@/types/itinerary";
-
-interface TripSummary {
-  id: string;
-  destination: string;
-  trip_data: Itinerary;
-  created_at: string;
-}
-
-const MyTrips = () => {
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [trips, setTrips] = useState<TripSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
+  Plus,
+  Search,
+  Trash2,
+  ArrowUpLeft,
+  MapPin,
+  CalendarDays,
+  Loader2,
+  Compass,
+} from "lucide-react";
+import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
+import { Button } from "@/components/ui/button";
+import { useAuthState } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { normalizePlan, formatDate } from "@/lib/trips";
+import { destinationImage } from "@/lib/destinations";
+import type { TripRecord } from "@/types/itinerary";
+export default function MyTrips() {
+  const { user, loading } = useAuthState();
+  const [trips, setTrips] = useState<TripRecord[]>([]),
+    [busy, setBusy] = useState(true),
+    [query, setQuery] = useState(""),
+    [error, setError] = useState(""),
+    [deleting, setDeleting] = useState<string | null>(null);
   useEffect(() => {
-    const fetchTrips = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-          setError("יש להתחבר כדי לצפות בטיולים שלך");
-          setLoading(false);
-          return;
-        }
-
-        // Fetch only the user's own trips
-        const { data, error: fetchError } = await supabase
-          .from("trips")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
-
-        if (fetchError) {
-          logger.error("Error fetching trips:", fetchError);
-          setError("שגיאה בטעינת הטיולים");
-          return;
-        }
-
-        setTrips(
-          (data || []).map((trip) => ({
-            id: trip.id,
-            destination: trip.destination,
-            trip_data: trip.trip_data as unknown as Itinerary,
-            created_at: trip.created_at,
-          }))
-        );
-      } catch (err) {
-        logger.error("Error:", err);
-        setError("שגיאה בטעינת הטיולים");
-      } finally {
-        setLoading(false);
-      }
+    if (loading) return;
+    if (!user) {
+      setBusy(false);
+      return;
+    }
+    let active = true;
+    supabase
+      .from("trips")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) setError("לא הצלחנו לטעון את הטיולים. נסו לרענן את העמוד.");
+        else setTrips(data || []);
+        setBusy(false);
+      });
+    return () => {
+      active = false;
     };
-
-    fetchTrips();
-  }, []);
-
-  const handleDeleteTrip = async (tripId: string) => {
-    setDeletingId(tripId);
-    try {
-      const { error: deleteError } = await supabase
-        .from("trips")
-        .delete()
-        .eq("id", tripId);
-
-      if (deleteError) {
-        throw deleteError;
-      }
-
-      // Remove from local state
-      setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
-      
-      toast({
-        title: "הטיול נמחק",
-        description: "הטיול הוסר מהרשימה שלך",
-      });
-    } catch (err) {
-      logger.error("Error deleting trip:", err);
-      toast({
-        title: "שגיאה במחיקה",
-        description: "לא ניתן למחוק את הטיול. נסה שוב.",
-        variant: "destructive",
-      });
-    } finally {
-      setDeletingId(null);
-    }
+  }, [user, loading]);
+  const remove = async (trip: TripRecord) => {
+    if (!window.confirm("למחוק את הטיול? לא ניתן לבטל את המחיקה.")) return;
+    setDeleting(trip.id);
+    const { data, error } = await supabase
+      .from("trips")
+      .delete()
+      .eq("id", trip.id)
+      .select("id");
+    if (error || !data?.length) setError("המחיקה נכשלה. אפשר לנסות שוב.");
+    else setTrips((v) => v.filter((t) => t.id !== trip.id));
+    setDeleting(null);
   };
-
-  // Get the first activity's persisted image URL for the card background.
-  const getFirstImage = (itinerary: Itinerary): string | null => {
-    for (const day of itinerary?.days ?? []) {
-      for (const activity of day.activities ?? []) {
-        if (activity.image_url) return activity.image_url;
-      }
-    }
-    return null;
-  };
-
-  // Get the number of days in the trip
-  const getTripDays = (itinerary: Itinerary): number => {
-    return itinerary?.days?.length || 0;
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">טוען את הטיולים שלך...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-destructive text-lg">{error}</p>
+  const filtered = trips.filter((t) => {
+    const p = normalizePlan(t.trip_data, t.destination);
+    return (p.metadata.title + p.metadata.destination)
+      .toLowerCase()
+      .includes(query.toLowerCase());
+  });
+  return (
+    <>
+      <SiteHeader />
+      <main className="section-wrap my-trips-page">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">המקומות שלכם. הסיפורים שלכם.</span>
+            <h1>הטיולים שלי</h1>
+            <p>כל ההרפתקאות, אלה שהיו ואלה שעוד בדרך.</p>
+          </div>
           <Button asChild>
-            <Link to="/auth">התחבר</Link>
+            <Link to="/trip/new">
+              <Plus size={18} />
+              מתכננים טיול חדש
+            </Link>
           </Button>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border py-4 px-6 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">הטיולים שלי</h1>
-          <div className="flex items-center gap-3">
-            <Button variant="outline" asChild>
-              <Link to="/">
-                <Home className="h-4 w-4 ms-2" />
-                דף הבית
-              </Link>
-            </Button>
+        {!user && !loading ? (
+          <div className="empty-state">
+            <Compass size={42} />
+            <h2>הטיולים שלכם מחכים כאן</h2>
+            <p>היכנסו לחשבון כדי לשמור מסלולים ולחזור אליהם בכל זמן.</p>
             <Button asChild>
-              <Link to="/">
-                <Plus className="h-4 w-4 ms-2" />
-                טיול חדש
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Content */}
-      <main className="max-w-6xl mx-auto py-8 px-6">
-        {trips.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="p-4 bg-muted rounded-full mb-4">
-              <MapPin className="h-10 w-10 text-muted-foreground" />
-            </div>
-            <h2 className="text-xl font-semibold text-foreground mb-2">
-              עדיין אין טיולים שמורים
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              תכנן את הטיול הראשון שלך ושמור אותו כאן
-            </p>
-            <Button asChild>
-              <Link to="/">
-                <Plus className="h-4 w-4 ms-2" />
-                תכנן טיול חדש
-              </Link>
+              <Link to="/auth?next=%2Fmy-trips">כניסה לחשבון</Link>
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {trips.map((trip) => (
-              <Card
-                key={trip.id}
-                className="group overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-              >
-                {/* Background Image - Clickable */}
-                <div 
-                  className="relative h-40 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden cursor-pointer"
-                  onClick={() => navigate(`/trip/${trip.id}`)}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10" />
-                  {getFirstImage(trip.trip_data) ? (
-                    <img
-                      src={getFirstImage(trip.trip_data) || ""}
-                      alt={trip.destination}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <MapPin className="h-12 w-12 text-primary/40" />
-                    </div>
-                  )}
-                  <div className="absolute bottom-3 right-3 z-20">
-                    <h3 className="text-xl font-bold text-white drop-shadow-lg">
-                      {trip.destination}
-                    </h3>
-                  </div>
-                </div>
-
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4" />
-                      <span>{new Date(trip.created_at).toLocaleDateString("he-IL")}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-medium">
-                        {getTripDays(trip.trip_data)} ימים
-                      </span>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={(e) => e.stopPropagation()}
+          <>
+            <label className="trips-search">
+              <Search size={19} />
+              <input
+                aria-label="חיפוש בטיולים"
+                placeholder="חיפוש לפי שם הטיול או היעד…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <span>{filtered.length} טיולים</span>
+            </label>
+            {error && (
+              <p role="alert" className="form-error">
+                {error}
+              </p>
+            )}
+            {busy ? (
+              <div className="empty-state">
+                <Loader2 className="animate-spin" />
+                טוענים את ההרפתקאות שלכם…
+              </div>
+            ) : (
+              <div className="trip-grid">
+                {filtered.map((t) => {
+                  const p = normalizePlan(t.trip_data, t.destination),
+                    image = p.cover?.url || destinationImage(t.destination);
+                  return (
+                    <article className="saved-trip-card" key={t.id}>
+                      <Link to={`/trip/${t.id}`} className="trip-card-photo">
+                        {image ? (
+                          <img src={image} alt={t.destination} loading="lazy" />
+                        ) : (
+                          <div className="trip-cover-placeholder">
+                            <Compass size={52} />
+                          </div>
+                        )}
+                        <span className="trip-days">
+                          {p.days.length} ימים של אפשרויות
+                        </span>
+                        <span className="destination-arrow">
+                          <ArrowUpLeft size={20} />
+                        </span>
+                      </Link>
+                      {p.cover && (
+                        <div className="image-credit">
+                          צילום:{" "}
+                          <a
+                            href={p.cover.photographerUrl}
+                            target="_blank"
+                            rel="noreferrer"
                           >
-                            {deletingId === trip.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                            {p.cover.photographer}
+                          </a>{" "}
+                          ·{" "}
+                          <a
+                            href={p.cover.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Unsplash
+                          </a>
+                        </div>
+                      )}
+                      <div className="saved-trip-body">
+                        <span className="eyebrow">
+                          <MapPin size={13} />
+                          {p.metadata.destination}
+                        </span>
+                        <Link to={`/trip/${t.id}`}>
+                          <h2>{p.metadata.title}</h2>
+                        </Link>
+                        <div className="saved-trip-meta">
+                          <span>
+                            <CalendarDays size={14} />
+                            {formatDate(p.metadata.startDate)}
+                            {p.metadata.endDate
+                              ? " — " + formatDate(p.metadata.endDate)
+                              : ""}
+                          </span>
+                          <button
+                            aria-label={`מחיקת ${p.metadata.title}`}
+                            disabled={deleting === t.id}
+                            onClick={() => void remove(t)}
+                          >
+                            {deleting === t.id ? (
+                              <Loader2 size={16} className="animate-spin" />
                             ) : (
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 size={16} />
                             )}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>האם למחוק את הטיול?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              פעולה זו תמחק לצמיתות את הטיול ל{trip.destination}. 
-                              לא ניתן לבטל פעולה זו.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter className="gap-2">
-                            <AlertDialogCancel>ביטול</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteTrip(trip.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              מחק טיול
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                <Link to="/trip/new" className="new-trip-card">
+                  <span>
+                    <Plus size={29} />
+                  </span>
+                  <h3>לאן בפעם הבאה?</h3>
+                  <p>עוד סיפור מתחיל כאן</p>
+                </Link>
+              </div>
+            )}
+            {!busy && query && !filtered.length && (
+              <p className="muted mt-6">לא נמצאו טיולים שתואמים לחיפוש.</p>
+            )}
+          </>
         )}
       </main>
-    </div>
+      <SiteFooter />
+    </>
   );
-};
-
-export default MyTrips;
+}

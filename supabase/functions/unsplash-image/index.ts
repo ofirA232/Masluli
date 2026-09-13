@@ -1,232 +1,87 @@
-/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { checkRateLimit, createRateLimitResponse, RATE_LIMITS } from '../_shared/rate-limit.ts';
-
-// Allowed origins - restrict to your domains
-const allowedOrigins = [
-  'http://localhost:8080',
-  'http://localhost:3000',
-];
-
-// Add production domains from environment
-const productionOrigins = Deno.env.get('ALLOWED_ORIGINS')?.split(',').filter(Boolean) || [];
-allowedOrigins.push(...productionOrigins);
-
-// Helper to get CORS headers based on request origin
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get('origin') || '';
-  
-  // Check if origin is allowed or if it's a Lovable preview domain
-  const isAllowed = allowedOrigins.includes(origin) || 
-    origin.endsWith('.lovable.app') || 
-    origin.endsWith('.lovableproject.com');
-  
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : '',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-}
-
-// Travel-related placeholder when no results found
-const TRAVEL_PLACEHOLDER = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&h=400&fit=crop";
-
-// Validation constants
-const MAX_QUERY_LENGTH = 100;
-const MIN_QUERY_LENGTH = 1;
-
-// Helper to verify JWT authentication
-async function verifyAuth(req: Request, corsHeaders: Record<string, string>): Promise<{ authenticated: true; userId: string } | { authenticated: false; response: Response }> {
-  const authHeader = req.headers.get('Authorization');
-  
-  if (!authHeader?.startsWith('Bearer ')) {
-    return {
-      authenticated: false,
-      response: new Response(
-        JSON.stringify({ 
-          imageUrl: TRAVEL_PLACEHOLDER, 
-          placeholder: true,
-          error: 'Authentication required' 
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      ),
-    };
-  }
-
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data, error } = await supabase.auth.getUser(token);
-  
-  if (error || !data?.user) {
-    return {
-      authenticated: false,
-      response: new Response(
-        JSON.stringify({ 
-          imageUrl: TRAVEL_PLACEHOLDER, 
-          placeholder: true,
-          error: 'Invalid session' 
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      ),
-    };
-  }
-
-  return { authenticated: true, userId: data.user.id };
-}
-
-// Sanitize query for safe API usage
-function sanitizeQuery(query: string): string {
-  return query
-    .replace(/[<>{}]/g, '') // Remove potentially harmful characters
-    .trim()
-    .substring(0, MAX_QUERY_LENGTH); // Enforce max length
-}
-
-// Validate query parameter
-function validateQuery(query: unknown): { valid: true; query: string } | { valid: false; error: string } {
-  if (typeof query !== 'string') {
-    return { valid: false, error: 'Query must be a string' };
-  }
-  
-  const trimmed = query.trim();
-  if (trimmed.length < MIN_QUERY_LENGTH) {
-    return { valid: false, error: 'Query cannot be empty' };
-  }
-  
-  if (trimmed.length > MAX_QUERY_LENGTH) {
-    return { valid: false, error: `Query must be ${MAX_QUERY_LENGTH} characters or less` };
-  }
-  
-  return { valid: true, query: sanitizeQuery(trimmed) };
-}
-
-Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
-  
-  // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  // Verify authentication
-  const authResult = await verifyAuth(req, corsHeaders);
-  if (!authResult.authenticated) {
-    return authResult.response;
-  }
-
-  // Rate limiting - image API calls (50 per hour)
-  const rateLimitResult = checkRateLimit(authResult.userId, RATE_LIMITS.IMAGE_API);
-  if (!rateLimitResult.allowed) {
-    return createRateLimitResponse(corsHeaders, rateLimitResult.resetAt);
-  }
-
+import {
+  handler,
+  userId,
+  quota,
+  textInput,
+  ApiError,
+  googleFetch,
+} from "../_shared/http.ts";
+// Unsplash only indexes English. Destinations arrive in Hebrew (or another
+// non-Latin script), so resolve them to their English place name first.
+// Autocomplete alone keeps the typed name in its original script, so the
+// prediction's place is re-read in English via its formatted address.
+const nonLatin = /[֐-׿؀-ۿЀ-ӿ぀-ヿ一-鿿]/g;
+async function englishName(query: string) {
+  if (!query.match(nonLatin) || !Deno.env.get("GOOGLE_MAPS_SERVER_KEY"))
+    return query;
   try {
-    const unsplashAccessKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
-    
-    if (!unsplashAccessKey) {
-      console.error("UNSPLASH_ACCESS_KEY is not configured");
-      return new Response(
-        JSON.stringify({ 
-          imageUrl: TRAVEL_PLACEHOLDER, 
-          placeholder: true,
-          error: "Service temporarily unavailable" 
+    const result = await googleFetch(
+      "https://places.googleapis.com/v1/places:autocomplete",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          input: query,
+          languageCode: "en",
+          includedPrimaryTypes: ["(regions)"],
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Universal input handling: Try URL params first, then request body
-    const url = new URL(req.url);
-    let rawQuery: unknown = url.searchParams.get("query");
-    
-    // If not in URL params, try request body
-    if (!rawQuery) {
-      try {
-        const body = await req.json();
-        rawQuery = body?.query;
-      } catch {
-        // Body parsing failed, query stays null
-      }
-    }
-
-    // Validate the query
-    const validation = validateQuery(rawQuery);
-    
-    if (!validation.valid) {
-      return new Response(
-        JSON.stringify({ 
-          imageUrl: TRAVEL_PLACEHOLDER, 
-          placeholder: true,
-          error: validation.error 
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const query = validation.query;
-
-    const unsplashUrl = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`;
-
-    const response = await fetch(unsplashUrl, {
-      headers: {
-        Authorization: `Client-ID ${unsplashAccessKey}`,
       },
-    });
-
-    if (!response.ok) {
-      console.error("Unsplash API error:", response.status);
-      return new Response(
-        JSON.stringify({ 
-          imageUrl: TRAVEL_PLACEHOLDER, 
-          placeholder: true,
-          error: "Image service temporarily unavailable" 
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const data = await response.json();
-    
-    if (!data.results || data.results.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          imageUrl: TRAVEL_PLACEHOLDER, 
-          placeholder: true,
-          error: "No images found for query" 
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Use urls.regular as per Unsplash API docs
-    const imageUrl = data.results[0].urls.regular;
-    const photographer = data.results[0].user?.name || "Unknown";
-    const photographerUrl = data.results[0].user?.links?.html || "https://unsplash.com";
-
-    return new Response(
-      JSON.stringify({ 
-        imageUrl, 
-        photographer, 
-        photographerUrl,
-        placeholder: false,
-        query: query
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Unexpected error in unsplash-image function:", error instanceof Error ? error.message : 'Unknown error');
-    return new Response(
-      JSON.stringify({ 
-        imageUrl: TRAVEL_PLACEHOLDER, 
-        placeholder: true,
-        error: "Service temporarily unavailable" 
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    const placeId = result.suggestions?.[0]?.placePrediction?.placeId;
+    if (typeof placeId !== "string" || !placeId) return query;
+    const place = await googleFetch(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=en`,
+      { headers: { "X-Goog-FieldMask": "formattedAddress" } },
     );
+    const latin = String(place.formattedAddress || "")
+      .replace(nonLatin, "")
+      .replace(/\s*,\s*(?=,|$)/g, "")
+      .trim();
+    return latin || query;
+  } catch {
+    return query;
   }
-});
+}
+Deno.serve((req) =>
+  handler(req, async (body) => {
+    const id = await userId(req),
+      query = textInput(body.query);
+    const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
+    if (!key) throw new ApiError(503, "תמונת היעד אינה זמינה כרגע");
+    await quota(id, "unsplash", 30, 3600);
+    const headers = {
+      Authorization: `Client-ID ${key}`,
+      "Accept-Version": "v1",
+    };
+    const term = await englishName(query);
+    const response = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(term)}&per_page=1&orientation=landscape`,
+      { headers, signal: AbortSignal.timeout(10000) },
+    );
+    if (!response.ok) throw new ApiError(502, "תמונת היעד אינה זמינה כרגע");
+    const data = await response.json(),
+      photo = data.results?.[0];
+    if (!photo) return { imageUrl: null, placeholder: true };
+    const download = new URL(photo.links.download_location);
+    if (
+      download.hostname === "api.unsplash.com" &&
+      download.protocol === "https:"
+    )
+      await fetch(download, {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => undefined);
+    const credit = (url: string) => {
+      const u = new URL(url);
+      u.searchParams.set("utm_source", "planatrip");
+      u.searchParams.set("utm_medium", "referral");
+      return u.href;
+    };
+    return {
+      imageUrl: photo.urls.regular,
+      photographer: photo.user.name,
+      photographerUrl: credit(photo.user.links.html),
+      sourceUrl: credit(photo.links.html),
+      placeholder: false,
+    };
+  }),
+);

@@ -1,0 +1,10 @@
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE SCHEMA auth;
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN BYPASSRLS;
+CREATE TABLE auth.users (id uuid PRIMARY KEY);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+GRANT USAGE ON SCHEMA auth, public TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+INSERT INTO auth.users VALUES ('22222222-2222-4222-8222-222222222222'), ('33333333-3333-4333-8333-333333333333');

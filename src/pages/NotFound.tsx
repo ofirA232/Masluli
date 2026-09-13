@@ -1,25 +1,23 @@
-import { useLocation } from "react-router-dom";
-import { useEffect } from "react";
-import { logger } from "@/lib/logger";
-
-const NotFound = () => {
-  const location = useLocation();
-
-  useEffect(() => {
-    logger.error("404 Error: User attempted to access non-existent route:", location.pathname);
-  }, [location.pathname]);
-
+import { Link } from "react-router-dom";
+import { Compass, ArrowRight } from "lucide-react";
+import { SiteHeader } from "@/components/SiteHeader";
+import { Button } from "@/components/ui/button";
+export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">404</h1>
-        <p className="mb-4 text-xl text-muted-foreground">Oops! Page not found</p>
-        <a href="/" className="text-primary underline hover:text-primary/90">
-          Return to Home
-        </a>
-      </div>
-    </div>
+    <>
+      <SiteHeader />
+      <main className="empty-state not-found">
+        <Compass size={64} />
+        <span className="eyebrow">404 · קצת סטינו מהמסלול</span>
+        <h1>העמוד הזה לא נמצא.</h1>
+        <p>אבל ההרפתקה הבאה שלכם עדיין מחכה.</p>
+        <Button asChild>
+          <Link to="/">
+            <ArrowRight />
+            בחזרה לדף הבית
+          </Link>
+        </Button>
+      </main>
+    </>
   );
-};
-
-export default NotFound;
+}

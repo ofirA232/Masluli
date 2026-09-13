@@ -1,1 +1,15 @@
-project_id = "hnttslbqkvfzadqiiyza"
+project_id = "planatrip"
+
+# Each function authenticates the user or validates a scoped share token itself.
+[functions.places]
+verify_jwt = false
+[functions.place-photo]
+verify_jwt = false
+[functions.trip-route]
+verify_jwt = false
+[functions.generate-itinerary]
+verify_jwt = false
+[functions.swap-activity]
+verify_jwt = false
+[functions.unsplash-image]
+verify_jwt = false

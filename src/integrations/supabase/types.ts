@@ -16,6 +16,8 @@ export type Database = {
     Tables: {
       trips: {
         Row: {
+          revision: number
+          updated_at: string
           created_at: string
           destination: string
           id: string
@@ -25,6 +27,8 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          revision?: number
+          updated_at?: string
           created_at?: string
           destination: string
           id?: string
@@ -34,6 +38,8 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          revision?: number
+          updated_at?: string
           created_at?: string
           destination?: string
           id?: string
@@ -49,10 +55,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      save_trip: { Args: { p_id: string; p_revision: number; p_destination: string; p_data: Json }; Returns: { revision: number; updated_at: string }[] }
+      create_share_link: { Args: { p_id: string }; Returns: string }
       generate_share_token: { Args: never; Returns: string }
       get_shared_trip: {
         Args: { token: string }
-        Returns: Database["public"]["Tables"]["trips"]["Row"][]
+        Returns: { id: string; destination: string; trip_data: Json; created_at: string; revision: number; updated_at: string }[]
       }
     }
     Enums: {
