@@ -875,11 +875,23 @@ export function TripWorkspace({
                       ))}
                     </div>
                     {generating && (
-                      <div className="ai-progress" role="status">
-                        <Loader2 className="animate-spin" />
-                        <strong>מחברים את כל הרעיונות למסלול…</strong>
-                        <p>זה יכול לקחת מעט זמן. הטיול כבר נשמר.</p>
-                      </div>
+                      <>
+                        <div className="ai-progress" role="status">
+                          <Loader2 className="animate-spin" />
+                          <strong>מחברים את כל הרעיונות למסלול…</strong>
+                          <p>זה יכול לקחת מעט זמן. הטיול כבר נשמר.</p>
+                        </div>
+                        {[0, 1, 2].map((i) => (
+                          <div className="skeleton-card" key={i} aria-hidden>
+                            <div>
+                              <div className="skeleton-line short" />
+                              <div className="skeleton-line" />
+                              <div className="skeleton-line medium" />
+                            </div>
+                            <div className="skeleton-photo" />
+                          </div>
+                        ))}
+                      </>
                     )}
                     {aiError && (
                       <div className="form-error" role="alert">

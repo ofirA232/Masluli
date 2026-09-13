@@ -4,6 +4,8 @@ import { config } from "@/lib/config";
 import type { Coordinates } from "@/types/itinerary";
 let loader: Promise<void> | undefined;
 let authFailed = false;
+const reducedMotion = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 Object.assign(window, {
   gm_authFailure: () => {
     authFailed = true;
@@ -98,6 +100,8 @@ export default function MapComponent({
     if (!ready || !map.current) return;
     markers.current.forEach((m) => m.setMap(null));
     const bounds = new google.maps.LatLngBounds();
+    // Drop pins in on the first paint only; later updates stay quiet.
+    const firstPaint = markers.current.length === 0 && !reducedMotion();
     markers.current = activities
       .filter((a) => a.coordinates)
       .map((a) => {
@@ -106,6 +110,7 @@ export default function MapComponent({
           map: map.current,
           position: a.coordinates,
           title: a.name,
+          animation: firstPaint ? google.maps.Animation.DROP : undefined,
           label: {
             text: String(a.number),
             color: "#ffffff",
@@ -134,8 +139,19 @@ export default function MapComponent({
   }, [activities, ready]);
   useEffect(() => {
     if (!ready || !selectedActivityId) return;
-    const a = activities.find((a) => a.id === selectedActivityId);
-    if (a?.coordinates) map.current?.panTo(a.coordinates);
+    const placed = activities.filter((a) => a.coordinates);
+    const index = placed.findIndex((a) => a.id === selectedActivityId);
+    if (index < 0) return;
+    map.current?.panTo(placed[index].coordinates!);
+    if (reducedMotion()) return;
+    // A single short bounce points at the chosen stop without nagging.
+    const marker = markers.current[index];
+    marker?.setAnimation(google.maps.Animation.BOUNCE);
+    const timer = window.setTimeout(() => marker?.setAnimation(null), 700);
+    return () => {
+      window.clearTimeout(timer);
+      marker?.setAnimation(null);
+    };
   }, [selectedActivityId, activities, ready]);
   useEffect(() => {
     if (!ready) return;

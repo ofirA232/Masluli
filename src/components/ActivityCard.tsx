@@ -178,7 +178,9 @@ export function ActivityCard({
               </span>
             )}
           </div>
-          <div className="activity-photo">
+          <div
+            className={`activity-photo ${a.place_id && !image && (place.isPending || photo.isPending) ? "is-loading" : ""}`}
+          >
             {image && !imageFailed ? (
               <img
                 src={image}
