@@ -20,10 +20,13 @@ import type {
   PlaceDetails,
   PlacePhoto,
   TripAccess,
+  TripMetadata,
 } from "@/types/itinerary";
 import { categories, money, safeUrl, transportModes } from "@/lib/trips";
 import { LodgingDetails, ModeIcon, TransportBody } from "./StopBodies";
 import { stopKind } from "@/lib/stops";
+import { bookingLink } from "@/lib/booking-links";
+import { config } from "@/lib/config";
 import { getPlace, getPhoto } from "@/lib/api";
 import { placeCacheFresh } from "@/lib/place-cache";
 // Keep provider data for the session so switching days, tabs or the map
@@ -48,6 +51,11 @@ interface Props {
   onDetails: (place: PlaceDetails) => void;
   /** Calendar date of the day this card sits in, for stay badges. */
   date?: string | null;
+  /** Trip facts used to build booking links. */
+  meta?: Pick<
+    TripMetadata,
+    "destination" | "startDate" | "endDate" | "travelers"
+  >;
   /** Persist freshly fetched Google content into the trip (owner only). */
   onCache?: (id: string, place: PlaceDetails, photo: PlacePhoto) => void;
 }
@@ -69,6 +77,7 @@ export function ActivityCard({
   onDetails,
   onCache,
   date = null,
+  meta,
 }: Props) {
   const kind = stopKind(a);
   const {
@@ -124,6 +133,12 @@ export function ActivityCard({
     image = photo.data?.url;
   useEffect(() => setImageFailed(false), [image]);
   const website = safeUrl(p?.website || a.booking_url);
+  const booking = meta
+    ? bookingLink(a, meta, website, {
+        bookingAid: config.bookingAid,
+        gygPartnerId: config.gygPartnerId,
+      })
+    : undefined;
   return (
     <article
       ref={setNodeRef}
@@ -250,6 +265,17 @@ export function ActivityCard({
                 : "עלות עדיין לא ידועה"}
             {a.estimate?.source === "ai" && " · אומדן AI"}
           </span>
+          {booking && booking.provider !== "website" && (
+            <a
+              href={booking.href}
+              target="_blank"
+              rel="noopener noreferrer sponsored"
+              className="book-link"
+              aria-label={`הזמנה באתר חיצוני: ${booking.label}`}
+            >
+              {booking.label} <ExternalLink size={12} />
+            </a>
+          )}
           {website && (
             <a
               href={website}
@@ -261,6 +287,11 @@ export function ActivityCard({
             </a>
           )}
         </div>
+        {booking && booking.provider !== "website" && (
+          <small className="external-note">
+            קישור חיצוני, ייתכן שכולל קוד שותפים
+          </small>
+        )}
         {!a.place_id && a.source !== "manual" && !a.transport && (
           <div className="verification-note">
             הצעת AI / מסלול ישן · המקום עדיין לא אומת{" "}

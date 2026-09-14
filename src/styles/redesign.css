@@ -3457,3 +3457,25 @@ button.user-avatar {
   color: #aa5036;
   padding: 4px 0;
 }
+
+/* ---------- Booking links ---------- */
+.book-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: #fff0e9;
+  color: #aa5036;
+  font-size: 12px;
+  font-weight: 500;
+}
+.book-link:hover {
+  background: #ffe4d8;
+}
+.external-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #9aa38f;
+}

@@ -19,6 +19,8 @@ npm run dev
 | VITE_SUPABASE_URL | כתובת הפרויקט |
 | VITE_SUPABASE_PUBLISHABLE_KEY | מפתח publishable או anon בלבד |
 | VITE_GOOGLE_MAPS_API_KEY | מפתח דפדפן של Google Maps JavaScript API |
+| VITE_BOOKING_AID | מזהה שותף של Booking.com לקישורי הזמנה (לא חובה) |
+| VITE_GYG_PARTNER_ID | מזהה שותף של GetYourGuide לקישורי כרטיסים (לא חובה) |
 
 אפשר להשתמש ב־.env.local לערכים מקומיים; הוא מוחרג מ־Git וגובר על .env. הותקנו @supabase/supabase-js ו־@supabase/ssr. אפליקציית Vite משתמשת בלקוח שב־src/integrations/supabase/client.ts, עם persistSession, autoRefreshToken ו־detectSessionInUrl. דוגמאות NEXT_PUBLIC, next/headers ו־middleware של Next.js אינן שייכות להרצה זו; אין כאן שרת Next.js או צורך ב־SSR cookies.
 

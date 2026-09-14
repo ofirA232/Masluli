@@ -652,6 +652,7 @@ export function TripWorkspace({
               index={i}
               color={color}
               day={target}
+              meta={plan.metadata}
               date={
                 target === "saved"
                   ? null
@@ -1207,6 +1208,7 @@ export function TripWorkspace({
             <ActivityCard
               key={previewed.activity.id}
               activity={previewed.activity}
+              meta={plan.metadata}
               index={previewed.index}
               color={previewed.color}
               day={previewed.day}
