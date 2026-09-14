@@ -204,3 +204,41 @@ Deno.test("traveler profile is read under the caller's JWT and fails open", asyn
     globalThis.fetch = original;
   }
 });
+
+Deno.test("AI transport and lodging never carry booking data", () => {
+  const leg = activity({
+    name: "טיסה",
+    category: "transport",
+    transport: {
+      mode: "flight",
+      from: "TLV",
+      to: "PVG",
+      depart_time: "08:10",
+      arrive_time: "23:45",
+      carrier: "X",
+      booking_ref: "SECRET",
+    },
+  }) as Record<string, any>;
+  assert(leg.transport.booking_ref === "" && leg.transport.carrier === "");
+  assert(leg.time === "08:10–23:45", "time derived from the leg");
+  const stay = activity(
+    {
+      name: "מלון",
+      category: "accommodation",
+      lodging: { kind: "hotel", nights: 10, booking_ref: "SECRET" },
+      estimate: { min: 400, max: 500 },
+    },
+    "2026-10-13",
+    "2026-10-15",
+  ) as Record<string, any>;
+  assert(stay.lodging.check_in === "2026-10-13", "check-in is the day");
+  assert(stay.lodging.check_out === "2026-10-15", "clamped to the trip end");
+  assert(stay.lodging.booking_ref === "", "no booking data");
+  assert(stay.estimate.quantity === 2, "estimate covers the nights");
+  const last = activity(
+    { name: "מלון", category: "accommodation", lodging: { nights: 1 } },
+    "2026-10-15",
+    "2026-10-15",
+  ) as Record<string, any>;
+  assert(last.lodging === undefined, "no stay on the last day");
+});

@@ -28,8 +28,41 @@ export interface Activity {
   auto_linked?: boolean;
   /** Google content cached with the trip, refreshed after 30 days per policy. */
   google?: PlaceCache;
+  /** Present on a transport leg (never a place, never routed). */
+  transport?: TransportLeg;
+  /** Present on a lodging stay; shown on every day it covers. */
+  lodging?: LodgingStay;
   notes?: string;
   estimate?: Estimate | null;
+}
+export type TransportMode =
+  | "flight"
+  | "train"
+  | "bus"
+  | "car"
+  | "ferry"
+  | "other";
+export interface TransportLeg {
+  mode: TransportMode;
+  from: string;
+  to: string;
+  /** "HH:mm" or "" */
+  depart_time: string;
+  arrive_time: string;
+  arrive_day_offset: 0 | 1 | 2;
+  carrier: string;
+  /** Only kept for manual stops; AI output never carries booking data. */
+  booking_ref: string;
+}
+export type LodgingKind = "hotel" | "apartment" | "hostel" | "other";
+export interface LodgingStay {
+  kind: LodgingKind;
+  /** YYYY-MM-DD; check_out is strictly after check_in. */
+  check_in: string;
+  check_out: string;
+  check_in_time: string;
+  check_out_time: string;
+  booking_ref: string;
 }
 
 export interface Day {

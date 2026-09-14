@@ -1,5 +1,5 @@
 import { handler, userId, quota, ApiError } from "../_shared/http.ts";
-import { activity, callAi, requestData } from "../_shared/ai.ts";
+import { activity, addDays, callAi, requestData } from "../_shared/ai.ts";
 import { preferences } from "../_shared/profile.ts";
 Deno.serve((req) =>
   handler(req, async (body) => {
@@ -30,7 +30,13 @@ Deno.serve((req) =>
             throw new ApiError(502, "התקבל מסלול חלקי. אפשר לנסות שוב.");
           days.push({
             day_number: start + i,
-            activities: day.activities.map(activity),
+            activities: day.activities.map((v: unknown) =>
+              activity(
+                v,
+                addDays(input.startDate, start + i - 1),
+                input.endDate,
+              ),
+            ),
           });
         }
         return days;

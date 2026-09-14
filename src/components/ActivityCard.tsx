@@ -21,7 +21,9 @@ import type {
   PlacePhoto,
   TripAccess,
 } from "@/types/itinerary";
-import { categories, money, safeUrl } from "@/lib/trips";
+import { categories, money, safeUrl, transportModes } from "@/lib/trips";
+import { LodgingDetails, ModeIcon, TransportBody } from "./StopBodies";
+import { stopKind } from "@/lib/stops";
 import { getPlace, getPhoto } from "@/lib/api";
 import { placeCacheFresh } from "@/lib/place-cache";
 // Keep provider data for the session so switching days, tabs or the map
@@ -44,6 +46,8 @@ interface Props {
   onSwap: () => void;
   swapping: boolean;
   onDetails: (place: PlaceDetails) => void;
+  /** Calendar date of the day this card sits in, for stay badges. */
+  date?: string | null;
   /** Persist freshly fetched Google content into the trip (owner only). */
   onCache?: (id: string, place: PlaceDetails, photo: PlacePhoto) => void;
 }
@@ -64,7 +68,9 @@ export function ActivityCard({
   swapping,
   onDetails,
   onCache,
+  date = null,
 }: Props) {
+  const kind = stopKind(a);
   const {
     attributes,
     listeners,
@@ -122,16 +128,25 @@ export function ActivityCard({
     <article
       ref={setNodeRef}
       id={`activity-${a.id}`}
-      className={`activity-card ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
+      className={`activity-card is-${kind} ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       <div ref={visibility} className="activity-content">
         <div className="activity-topline">
-          <span className="category-label">{categories[a.category]}</span>
+          <span className="category-label">
+            {a.transport ? (
+              <>
+                <ModeIcon mode={a.transport.mode} size={12} />
+                {transportModes[a.transport.mode]}
+              </>
+            ) : (
+              categories[a.category]
+            )}
+          </span>
           {a.time && (
             <span className="activity-time">
               <Clock3 size={12} />
-              {a.time}
+              <span dir="ltr">{a.time}</span>
             </span>
           )}
           {!readOnly && (
@@ -154,30 +169,40 @@ export function ActivityCard({
           >
             {index + 1}
           </button>
-          <div className="activity-text">
-            <button className="activity-title" onClick={onSelect}>
-              {p?.name || a.name}
-            </button>
-            {p?.rating !== undefined && (
-              <span className="place-rating">
-                <Star size={12} fill="currentColor" />
-                {p.rating}
-                <small>({p.ratingCount || 0}) · Google Maps</small>
-              </span>
-            )}
-            <p>
-              {a.description ||
-                (a.place_id
-                  ? "עוד מקום ששווה לעצור בו בדרך."
-                  : "הוסיפו הערות ופרטים קטנים שהופכים את הטיול לשלכם.")}
-            </p>
-            {(p?.address || a.address) && (
-              <span className="activity-address">
-                <MapPin size={12} />
-                {p?.address || a.address}
-              </span>
-            )}
-          </div>
+          {a.transport ? (
+            <div className="activity-text">
+              <button className="activity-title" onClick={onSelect}>
+                {a.name}
+              </button>
+              <TransportBody a={a} />
+            </div>
+          ) : (
+            <div className="activity-text">
+              <button className="activity-title" onClick={onSelect}>
+                {p?.name || a.name}
+              </button>
+              {p?.rating !== undefined && (
+                <span className="place-rating">
+                  <Star size={12} fill="currentColor" />
+                  {p.rating}
+                  <small>({p.ratingCount || 0}) · Google Maps</small>
+                </span>
+              )}
+              <p>
+                {a.description ||
+                  (a.place_id
+                    ? "עוד מקום ששווה לעצור בו בדרך."
+                    : "הוסיפו הערות ופרטים קטנים שהופכים את הטיול לשלכם.")}
+              </p>
+              {(p?.address || a.address) && (
+                <span className="activity-address">
+                  <MapPin size={12} />
+                  {p?.address || a.address}
+                </span>
+              )}
+              {a.lodging && <LodgingDetails a={a} date={date} />}
+            </div>
+          )}
           <div
             className={`activity-photo ${a.place_id && !image && (place.isPending || photo.isPending) ? "is-loading" : ""}`}
           >
@@ -236,7 +261,7 @@ export function ActivityCard({
             </a>
           )}
         </div>
-        {!a.place_id && a.source !== "manual" && (
+        {!a.place_id && a.source !== "manual" && !a.transport && (
           <div className="verification-note">
             הצעת AI / מסלול ישן · המקום עדיין לא אומת{" "}
             {!readOnly && <button onClick={onEdit}>בחירת מקום</button>}
@@ -333,7 +358,7 @@ export function ActivityCard({
               variant="ghost"
               size="icon"
               aria-label="הצעת פעילות חלופית עם AI"
-              disabled={swapping}
+              disabled={swapping || !!a.transport || !!a.lodging}
               onClick={onSwap}
             >
               <RefreshCw className={swapping ? "animate-spin" : ""} />

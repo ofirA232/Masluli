@@ -5,6 +5,10 @@ import type {
   Category,
   Estimate,
   ItineraryRequest,
+  LodgingKind,
+  LodgingStay,
+  TransportLeg,
+  TransportMode,
   TripPlan,
 } from "@/types/itinerary";
 
@@ -139,6 +143,105 @@ export function normalizeEstimate(value: unknown): Estimate | null {
     currency: "ILS",
   };
 }
+export const transportModes: Record<TransportMode, string> = {
+  flight: "טיסה",
+  train: "רכבת",
+  bus: "אוטובוס",
+  car: "רכב",
+  ferry: "מעבורת",
+  other: "אחר",
+};
+export const lodgingKinds: Record<LodgingKind, string> = {
+  hotel: "מלון",
+  apartment: "דירה",
+  hostel: "הוסטל",
+  other: "אחר",
+};
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const clock = (v: unknown) =>
+  typeof v === "string" && HHMM.test(v) ? v : "";
+const has = (map: object, key: string) =>
+  Object.prototype.hasOwnProperty.call(map, key);
+/** A leg between places. Booking data is dropped when the AI wrote it. */
+export function normalizeTransport(
+  value: unknown,
+  source: Activity["source"],
+): TransportLeg | undefined {
+  const t = object(value);
+  if (!Object.keys(t).length) return undefined;
+  return {
+    mode: has(transportModes, str(t.mode))
+      ? (t.mode as TransportMode)
+      : "other",
+    from: str(t.from).slice(0, 200),
+    to: str(t.to).slice(0, 200),
+    depart_time: clock(t.depart_time),
+    arrive_time: clock(t.arrive_time),
+    arrive_day_offset:
+      t.arrive_day_offset === 1 || t.arrive_day_offset === 2
+        ? t.arrive_day_offset
+        : 0,
+    carrier: str(t.carrier).slice(0, 100),
+    booking_ref: source === "ai" ? "" : str(t.booking_ref).slice(0, 60),
+  };
+}
+/** A stay of 1..365 nights; anything else is not a stay. */
+export function normalizeLodging(
+  value: unknown,
+  source: Activity["source"],
+): LodgingStay | undefined {
+  const l = object(value);
+  const check_in = dateOnly(l.check_in),
+    check_out = dateOnly(l.check_out);
+  if (!check_in || !check_out) return undefined;
+  const nights = dayCount(check_in, check_out) - 1;
+  if (nights < 1 || nights > 365) return undefined;
+  return {
+    kind: has(lodgingKinds, str(l.kind)) ? (l.kind as LodgingKind) : "hotel",
+    check_in,
+    check_out,
+    check_in_time: clock(l.check_in_time),
+    check_out_time: clock(l.check_out_time),
+    booking_ref: source === "ai" ? "" : str(l.booking_ref).slice(0, 60),
+  };
+}
+export const transportTime = (t: TransportLeg) =>
+  t.depart_time
+    ? t.depart_time +
+      (t.arrive_time
+        ? `–${t.arrive_time}${t.arrive_day_offset ? ` +${t.arrive_day_offset}` : ""}`
+        : "")
+    : "";
+export const lodgingNights = (l: LodgingStay) =>
+  dayCount(l.check_in, l.check_out) - 1;
+export function dayForDate(plan: TripPlan, date: string): number | null {
+  const found = plan.days.find(
+    (d) => dayDate(plan.metadata.startDate, d.day_number - 1) === date,
+  );
+  return found ? found.day_number : null;
+}
+/** Stays covering a day whose real card lives on another day. */
+export function staysForDay(plan: TripPlan, dayNumber: number) {
+  const date = dayDate(plan.metadata.startDate, dayNumber - 1);
+  if (!date) return [];
+  return plan.days.flatMap((d) =>
+    d.day_number === dayNumber
+      ? []
+      : d.activities
+          .filter(
+            (a) =>
+              a.lodging &&
+              a.lodging.check_in <= date &&
+              date <= a.lodging.check_out,
+          )
+          .map((a) => ({
+            activity: a,
+            nights: lodgingNights(a.lodging!),
+            night: dayCount(a.lodging!.check_in, date),
+            checkout: date === a.lodging!.check_out,
+          })),
+  );
+}
 export function normalizeActivity(
   value: unknown,
   source: Activity["source"] = "legacy",
@@ -186,6 +289,24 @@ export function normalizeActivity(
     result.booking_url = safeUrl(str(a.booking_url));
   }
   if (result.source === "legacy") result.image_url = safeUrl(str(a.image_url));
+  const transport = normalizeTransport(a.transport, result.source);
+  const lodging = transport
+    ? undefined
+    : normalizeLodging(a.lodging, result.source);
+  if (transport) {
+    result.transport = transport;
+    result.category = "transport";
+    result.time = transportTime(transport) || result.time;
+    // A leg is not a place: never linked, never auto-linked, never routed.
+    delete result.place_id;
+    delete result.auto_linked;
+    delete result.google;
+    delete result.coordinates;
+  } else if (lodging) {
+    result.lodging = lodging;
+    result.category = "accommodation";
+    if (lodging.check_in_time) result.time = lodging.check_in_time;
+  }
   return result;
 }
 export function normalizePlan(value: unknown, destination = ""): TripPlan {

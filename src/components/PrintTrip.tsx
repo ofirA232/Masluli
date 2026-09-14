@@ -1,5 +1,14 @@
 import type { Activity, TripPlan } from "@/types/itinerary";
-import { budgetTotals, dayDate, formatDate, money } from "@/lib/trips";
+import {
+  budgetTotals,
+  dayDate,
+  formatDate,
+  lodgingKinds,
+  lodgingNights,
+  money,
+  staysForDay,
+  transportModes,
+} from "@/lib/trips";
 
 // Prints only saved planning data; transient provider data is never exported.
 export function PrintTrip({ plan }: { plan: TripPlan }) {
@@ -13,6 +22,29 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
               {a.time && <span>{a.time} · </span>}
               {a.name}
             </h3>
+            {a.transport && (
+              <p>
+                {transportModes[a.transport.mode]}
+                {a.transport.from || a.transport.to
+                  ? `: ${a.transport.from} ← ${a.transport.to}`
+                  : ""}
+                {a.transport.carrier ? ` · ${a.transport.carrier}` : ""}
+                {a.transport.booking_ref
+                  ? ` · הזמנה ${a.transport.booking_ref}`
+                  : ""}
+              </p>
+            )}
+            {a.lodging && (
+              <p>
+                {lodgingKinds[a.lodging.kind]} · צ'ק-אין{" "}
+                {formatDate(a.lodging.check_in)} · צ'ק-אאוט{" "}
+                {formatDate(a.lodging.check_out)} · {lodgingNights(a.lodging)}{" "}
+                לילות
+                {a.lodging.booking_ref
+                  ? ` · הזמנה ${a.lodging.booking_ref}`
+                  : ""}
+              </p>
+            )}
             {a.description && <p>{a.description}</p>}
             {a.address && <p>{a.address}</p>}
             {a.notes && <p className="print-notes">{a.notes}</p>}
@@ -50,6 +82,12 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
             {dayDate(plan.metadata.startDate, d.day_number - 1) &&
               ` · ${formatDate(dayDate(plan.metadata.startDate, d.day_number - 1))}`}
           </h2>
+          {staysForDay(plan, d.day_number).map((s) => (
+            <p key={s.activity.id} className="print-stay">
+              לינה: {s.activity.name} ·{" "}
+              {s.checkout ? "צ'ק-אאוט" : `לילה ${s.night} מתוך ${s.nights}`}
+            </p>
+          ))}
           {activities(d.activities)}
         </section>
       ))}

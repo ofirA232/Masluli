@@ -35,7 +35,7 @@ test("manual creation, autosave, movement, budget and reload", async ({
   await page.getByRole("radio").nth(1).check();
   await page.getByRole("button", { name: "יוצרים את הטיול שלי" }).click();
   await expect(page).toHaveURL(new RegExp("/trip/" + tripId));
-  await page.getByRole("button", { name: "הוספת מקום", exact: true }).click();
+  await page.getByRole("button", { name: "הוספת תחנה", exact: true }).click();
   await page.getByLabel("שם הפעילות").fill("בית קפה ליד הנהר");
   await page.getByLabel("עלות מינימלית").fill("50");
   await page.getByLabel("עלות מקסימלית").fill("70");
@@ -155,7 +155,7 @@ test("shared trips expose no editor and reject invalid links", async ({
   await page.goto("/trip/" + tripId + "?share_token=test-share-token");
   await expect(page.locator(".activity-title").first()).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "הוספת מקום", exact: true }),
+    page.getByRole("button", { name: "הוספת תחנה", exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "הצעת AI", exact: true }),

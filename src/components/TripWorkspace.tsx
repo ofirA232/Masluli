@@ -66,14 +66,17 @@ import {
   allActivities,
   dayColors,
   dayDate,
+  dayForDate,
   formatDate,
   moveActivity,
   normalizeActivity,
+  staysForDay,
   updateActivity,
   uid,
 } from "@/lib/trips";
 import { getPlace, getRoute, invoke, searchPlaces } from "@/lib/api";
 import { pickPlace } from "@/lib/places-match";
+import { LodgingGhost } from "./StopBodies";
 import { placeCacheFresh, withPlaceCache } from "@/lib/place-cache";
 import { destinationImage } from "@/lib/destinations";
 import { supabase } from "@/integrations/supabase/client";
@@ -304,12 +307,16 @@ export function TripWorkspace({
       )
       .filter((a) => a.coordinates);
   }, [mapLists, details]);
-  const routeIds =
+  // Transport legs are never routed; legs are drawn only between places.
+  const routable = (
     day !== "all" && tab === "itinerary"
-      ? (plan.days.find((d) => d.day_number === day)?.activities || []).map(
-          (a) => a.place_id,
-        )
-      : [];
+      ? plan.days.find((d) => d.day_number === day)?.activities || []
+      : []
+  ).filter((a) => !a.transport);
+  const routeIds = routable.map((a) => a.place_id);
+  const legAfter = new Map(
+    routable.slice(0, -1).map((a, i) => [a.id, i] as const),
+  );
   const canRoute =
     routeIds.length > 1 && routeIds.length <= 25 && routeIds.every(Boolean);
   const route = useQuery({
@@ -420,7 +427,11 @@ export function TripWorkspace({
     const candidates = (
       plan.days.find((d) => d.day_number === day)?.activities || []
     ).filter(
-      (a) => a.source === "ai" && !a.place_id && !resolved.current.has(a.id),
+      (a) =>
+        a.source === "ai" &&
+        !a.place_id &&
+        !a.transport &&
+        !resolved.current.has(a.id),
     );
     const destination = plan.metadata.destination;
     for (const a of candidates) {
@@ -543,6 +554,27 @@ export function TripWorkspace({
     color: string,
   ) => (
     <DayDrop day={target}>
+      {target !== "saved" &&
+        staysForDay(plan, target).map((s) => (
+          <LodgingGhost
+            key={s.activity.id}
+            a={s.activity}
+            date={dayDate(plan.metadata.startDate, target - 1)}
+            color={color}
+            onOpen={
+              locked
+                ? undefined
+                : () =>
+                    setDialog({
+                      activity: s.activity,
+                      day:
+                        plan.days.find((d) =>
+                          d.activities.some((v) => v.id === s.activity.id),
+                        )?.day_number ?? target,
+                    })
+            }
+          />
+        ))}
       <SortableContext
         items={activities.map((a) => a.id)}
         strategy={verticalListSortingStrategy}
@@ -554,6 +586,11 @@ export function TripWorkspace({
               index={i}
               color={color}
               day={target}
+              date={
+                target === "saved"
+                  ? null
+                  : dayDate(plan.metadata.startDate, target - 1)
+              }
               dayCount={plan.days.length}
               access={access}
               readOnly={locked}
@@ -579,13 +616,26 @@ export function TripWorkspace({
               onDetails={onDetails}
               onCache={cachePlace}
             />
-            {canRoute && route.data?.legs[i] && (
-              <div className="route-leg">
-                {mode === "WALK" ? <Footprints size={13} /> : <Car size={13} />}
-                כ־{Math.ceil(route.data.legs[i].duration / 60)} דקות ·{" "}
-                {(route.data.legs[i].distance / 1000).toFixed(1)} ק״מ
-              </div>
-            )}
+            {canRoute &&
+              legAfter.has(a.id) &&
+              route.data?.legs[legAfter.get(a.id)!] && (
+                <div className="route-leg">
+                  {mode === "WALK" ? (
+                    <Footprints size={13} />
+                  ) : (
+                    <Car size={13} />
+                  )}
+                  כ־
+                  {Math.ceil(
+                    route.data.legs[legAfter.get(a.id)!].duration / 60,
+                  )}{" "}
+                  דקות ·{" "}
+                  {(
+                    route.data.legs[legAfter.get(a.id)!].distance / 1000
+                  ).toFixed(1)}{" "}
+                  ק״מ
+                </div>
+              )}
           </div>
         ))}
       </SortableContext>
@@ -605,7 +655,7 @@ export function TripWorkspace({
           onClick={() => setDialog({ activity: null, day: target })}
         >
           <Plus size={17} />
-          הוספת מקום
+          הוספת תחנה
         </button>
       )}
     </DayDrop>
@@ -1063,7 +1113,9 @@ export function TripWorkspace({
       >
         {previewed && (
           <DialogContent className="activity-preview">
-            <DialogTitle className="sr-only">{previewed.activity.name}</DialogTitle>
+            <DialogTitle className="sr-only">
+              {previewed.activity.name}
+            </DialogTitle>
             <DialogDescription className="sr-only">
               פרטי התחנה שנבחרה במפה
             </DialogDescription>
@@ -1112,22 +1164,26 @@ export function TripWorkspace({
           key={dialog.activity?.id || "new"}
           activity={dialog.activity}
           destination={plan.metadata.destination}
+          day={dialog.day}
+          startDate={plan.metadata.startDate}
           onClose={() => setDialog(null)}
           onSave={(a) =>
-            edit((p) =>
-              dialog.activity
-                ? updateActivity(p, a)
-                : dialog.day === "saved"
-                  ? { ...p, saved_places: [...p.saved_places, a] }
-                  : {
-                      ...p,
-                      days: p.days.map((d) =>
-                        d.day_number === dialog.day
-                          ? { ...d, activities: [...d.activities, a] }
-                          : d,
-                      ),
-                    },
-            )
+            edit((p) => {
+              if (dialog.activity) return updateActivity(p, a);
+              // A new stay lands on its check-in day when the trip has dates.
+              const target =
+                (a.lodging && dayForDate(p, a.lodging.check_in)) || dialog.day;
+              return target === "saved"
+                ? { ...p, saved_places: [...p.saved_places, a] }
+                : {
+                    ...p,
+                    days: p.days.map((d) =>
+                      d.day_number === target
+                        ? { ...d, activities: [...d.activities, a] }
+                        : d,
+                    ),
+                  };
+            })
           }
         />
       )}
