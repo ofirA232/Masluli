@@ -173,3 +173,34 @@ Deno.test(
     await rejected(() => requestData({ ...body, endDate: "2026-05-30" }), 400);
   },
 );
+
+Deno.test("traveler profile is read under the caller's JWT and fails open", async () => {
+  const { preferences } = await import("../../supabase/functions/_shared/profile.ts");
+  const original = globalThis.fetch;
+  const withResponse = (status: number, body: unknown) =>
+    (globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      )) as typeof fetch);
+  try {
+    const req = new Request("https://edge.invalid", {
+      method: "POST",
+      headers: { Authorization: "Bearer user-jwt" },
+    });
+    withResponse(500, { message: "boom" });
+    assert((await preferences(req)) === null, "errors must fail open");
+    withResponse(200, { preferences: {} });
+    assert((await preferences(req)) === null, "empty profile is null");
+    withResponse(200, {
+      preferences: { pace: "relaxed", kids: true, budget: "gold", admin: 1 },
+    });
+    const p = await preferences(req);
+    assert(p?.pace === "relaxed" && p.kids === true, "known values kept");
+    assert(p?.budget === null && !("admin" in p), "unknown values dropped");
+  } finally {
+    globalThis.fetch = original;
+  }
+});

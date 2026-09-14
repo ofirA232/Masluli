@@ -14,16 +14,7 @@ import { Button } from "@/components/ui/button";
 import { requestSchema } from "@/lib/trips";
 import { invoke } from "@/lib/api";
 import type { ItineraryRequest } from "@/types/itinerary";
-const interests = [
-  "אוכל",
-  "טבע",
-  "היסטוריה",
-  "אמנות",
-  "קניות",
-  "חופים",
-  "הרפתקאות",
-  "רוגע",
-];
+import { interestOptions as interests } from "@/lib/preferences";
 export const requestKey = "planatrip:new-trip";
 export function TripForm({
   compact = false,

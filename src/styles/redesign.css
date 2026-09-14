@@ -3015,3 +3015,66 @@ button:not(:disabled):active {
 .saved-trip-card:hover .trip-card-photo img {
   transform: scale(1.04);
 }
+
+/* ---------- Traveler profile ---------- */
+button.user-avatar {
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.user-menu {
+  min-width: 220px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.user-menu [role="menuitem"] {
+  gap: 8px;
+  cursor: pointer;
+}
+.user-menu [role="menuitem"] small {
+  margin-inline-start: auto;
+  color: #b0573b;
+  font-size: 10px;
+}
+.profile-dialog {
+  max-width: 560px;
+}
+.profile-form .choice-group {
+  margin: 14px 0;
+}
+.profile-form .choice-group h3 {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.profile-form .choice-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.profile-form .choice-group button {
+  font-size: 12px;
+  padding: 7px 15px;
+  border: 1px solid #e2e4db;
+  border-radius: 20px;
+  color: #6d7763;
+  background: #fff;
+}
+.profile-form .choice-group button.selected {
+  border-color: #d78e78;
+  background: #fff0e9;
+  color: #aa5036;
+}
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 14px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: #d75a46;
+}

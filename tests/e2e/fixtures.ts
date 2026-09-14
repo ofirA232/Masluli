@@ -115,11 +115,17 @@ export async function setup(page: Page, authenticated = true) {
   };
   if (authenticated)
     await page.addInitScript(
-      ({ project, session }) =>
+      ({ project, session }) => {
         localStorage.setItem(
           `sb-${project}-auth-token`,
           JSON.stringify(session),
-        ),
+        );
+        // The one-time profile nudge must not steal focus in the specs.
+        localStorage.setItem(
+          `planatrip:profile-nudge:${session.user.id}`,
+          "1",
+        );
+      },
       { project, session },
     );
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -159,6 +165,10 @@ export async function setup(page: Page, authenticated = true) {
       if (req.postDataJSON().token !== "test-share-token") return respond([]);
       const { user_id: _user, share_token: _token, ...publicRow } = state.row;
       return respond([publicRow]);
+    }
+    if (path.includes("/rest/v1/profiles")) {
+      if (req.method() === "POST") return respond(req.postDataJSON(), 201);
+      return respond([]);
     }
     if (path.includes("/rest/v1/trips")) {
       if (req.method() === "POST") {
