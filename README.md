@@ -65,6 +65,7 @@ npx supabase functions deploy place-photo --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy trip-route --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy generate-itinerary --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy swap-activity --project-ref YOUR_PROJECT_REF
+npx supabase functions deploy refine-itinerary --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy unsplash-image --project-ref YOUR_PROJECT_REF
 ```
 

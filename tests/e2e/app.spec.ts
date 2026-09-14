@@ -290,3 +290,28 @@ test("gallery opens saved trips and confirms deletion", async ({ page }) => {
     page.getByRole("heading", { name: "שלושה ימים בפריז" }),
   ).toHaveCount(0);
 });
+test("chat refinement adds a stop, keeps existing data and can be undone", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/trip/" + tripId);
+  await page.locator("article.activity-card").first().waitFor();
+  const before = await page.locator("article.activity-card").count();
+  const firstTitle = await page.locator(".activity-title").first().textContent();
+  await page.getByLabel("מה לשנות במסלול").fill("תוסיף מוזיאון");
+  await page.getByRole("button", { name: "שליחה" }).click();
+  await expect(page.locator(".refine-message.assistant")).toContainText(
+    "הוספתי מוזיאון",
+  );
+  await expect(page.locator("article.activity-card")).toHaveCount(before + 1);
+  await expect(page.locator(".activity-title").first()).toHaveText(
+    firstTitle || "",
+  );
+  await expect
+    .poll(() => state.row.trip_data.days[0].activities.length)
+    .toBe(before + 1);
+  await page.getByRole("button", { name: "בטל" }).click();
+  await expect(page.locator("article.activity-card")).toHaveCount(before);
+  await expect.poll(() => state.row.trip_data.days[0].activities.length).toBe(before);
+});

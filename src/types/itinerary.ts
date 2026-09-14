@@ -36,12 +36,7 @@ export interface Activity {
   estimate?: Estimate | null;
 }
 export type TransportMode =
-  | "flight"
-  | "train"
-  | "bus"
-  | "car"
-  | "ferry"
-  | "other";
+  "flight" | "train" | "bus" | "car" | "ferry" | "other";
 export interface TransportLeg {
   mode: TransportMode;
   from: string;
@@ -166,4 +161,24 @@ export interface RouteResult {
   distance: number;
   duration: number;
   legs: { distance: number; duration: number }[];
+}
+/** Chat refinement protocol: only changed days come back, kept stops as {id}. */
+export interface RefineKept {
+  id: string;
+  time?: string;
+}
+export type RefineNew = Partial<Activity> & { replaces?: string };
+export interface RefineDay {
+  day_number: number;
+  activities: (RefineKept | RefineNew)[];
+}
+export interface RefineResponse {
+  reply: string;
+  days: RefineDay[];
+}
+export interface RefineSummary {
+  added: number;
+  removed: number;
+  changed: number;
+  days: number[];
 }

@@ -174,36 +174,40 @@ Deno.test(
   },
 );
 
-Deno.test("traveler profile is read under the caller's JWT and fails open", async () => {
-  const { preferences } = await import("../../supabase/functions/_shared/profile.ts");
-  const original = globalThis.fetch;
-  const withResponse = (status: number, body: unknown) =>
-    (globalThis.fetch = (() =>
-      Promise.resolve(
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { "content-type": "application/json" },
-        }),
-      )) as typeof fetch);
-  try {
-    const req = new Request("https://edge.invalid", {
-      method: "POST",
-      headers: { Authorization: "Bearer user-jwt" },
-    });
-    withResponse(500, { message: "boom" });
-    assert((await preferences(req)) === null, "errors must fail open");
-    withResponse(200, { preferences: {} });
-    assert((await preferences(req)) === null, "empty profile is null");
-    withResponse(200, {
-      preferences: { pace: "relaxed", kids: true, budget: "gold", admin: 1 },
-    });
-    const p = await preferences(req);
-    assert(p?.pace === "relaxed" && p.kids === true, "known values kept");
-    assert(p?.budget === null && !("admin" in p), "unknown values dropped");
-  } finally {
-    globalThis.fetch = original;
-  }
-});
+Deno.test(
+  "traveler profile is read under the caller's JWT and fails open",
+  async () => {
+    const { preferences } =
+      await import("../../supabase/functions/_shared/profile.ts");
+    const original = globalThis.fetch;
+    const withResponse = (status: number, body: unknown) =>
+      (globalThis.fetch = (() =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { "content-type": "application/json" },
+          }),
+        )) as typeof fetch);
+    try {
+      const req = new Request("https://edge.invalid", {
+        method: "POST",
+        headers: { Authorization: "Bearer user-jwt" },
+      });
+      withResponse(500, { message: "boom" });
+      assert((await preferences(req)) === null, "errors must fail open");
+      withResponse(200, { preferences: {} });
+      assert((await preferences(req)) === null, "empty profile is null");
+      withResponse(200, {
+        preferences: { pace: "relaxed", kids: true, budget: "gold", admin: 1 },
+      });
+      const p = await preferences(req);
+      assert(p?.pace === "relaxed" && p.kids === true, "known values kept");
+      assert(p?.budget === null && !("admin" in p), "unknown values dropped");
+    } finally {
+      globalThis.fetch = original;
+    }
+  },
+);
 
 Deno.test("AI transport and lodging never carry booking data", () => {
   const leg = activity({
@@ -242,3 +246,90 @@ Deno.test("AI transport and lodging never carry booking data", () => {
   ) as Record<string, any>;
   assert(last.lodging === undefined, "no stay on the last day");
 });
+
+Deno.test(
+  "refinement requests and replies are validated on both sides",
+  async () => {
+    const { refineInput, refineOutput } =
+      await import("../../supabase/functions/_shared/refine.ts");
+    const body = {
+      destination: "פריז",
+      message: "תרגיע את יום 1",
+      focus_day: 1,
+      metadata: {
+        startDate: "2026-10-04",
+        endDate: "2026-10-06",
+        travelers: 2,
+      },
+      days: [
+        {
+          day_number: 1,
+          activities: [
+            { id: "a1", name: "לובר", time: "09:00", category: "attraction" },
+            { id: "a2", name: "צהריים", category: "restaurant" },
+          ],
+        },
+        { day_number: 2, activities: [] },
+      ],
+    };
+    const { input, known } = refineInput(body);
+    assert(input.days[0].activities[0].category === "attraction");
+    assert(known.ids.get("a2") === "צהריים" && known.dayNumbers.has(2));
+    await rejected(() => refineInput({ ...body, message: "" }), 400);
+    await rejected(() => refineInput({ ...body, days: [] }), 400);
+    await rejected(
+      () =>
+        refineInput({
+          ...body,
+          days: [{ day_number: 1, activities: [{ name: "no id" }] }],
+        }),
+      400,
+    );
+    const out = refineOutput(
+      {
+        reply: "x".repeat(600),
+        days: [
+          {
+            day_number: 1,
+            activities: [
+              {
+                id: "a1",
+                name: "renamed",
+                time: "10:00",
+                description: "rewritten",
+                place_id: "leak",
+              },
+              {
+                name: "חדש",
+                category: "shopping",
+                coordinates: { lat: 1, lng: 2 },
+                replaces: "a2",
+              },
+              { id: "a1" },
+            ],
+          },
+          { day_number: 7, activities: [{ id: "a1" }] },
+        ],
+      },
+      known,
+    );
+    assert(out.reply.length === 500, "reply is capped");
+    assert(out.days.length === 1, "unknown days are dropped");
+    const [kept, created] = out.days[0].activities as Record<string, unknown>[];
+    assert(
+      Object.keys(kept).sort().join() === "id,time" && kept.time === "10:00",
+      "kept items are stripped to id and changed fields",
+    );
+    assert(
+      created.source === "ai" &&
+        !("coordinates" in created) &&
+        created.replaces === "a2",
+      "new items pass the allowlist and keep replaces",
+    );
+    assert(out.days[0].activities.length === 2, "duplicate ids are dropped");
+    await rejected(
+      () => Promise.resolve(refineOutput({ reply: "" }, known)),
+      502,
+    );
+  },
+);

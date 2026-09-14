@@ -199,6 +199,29 @@ export async function setup(page: Page, authenticated = true) {
         })),
       });
     }
+    if (path.includes("/functions/v1/refine-itinerary")) {
+      const body = req.postDataJSON();
+      const first = body.days[0];
+      return respond({
+        reply: "הוספתי מוזיאון ליום 1.",
+        days: [
+          {
+            day_number: first.day_number,
+            activities: [
+              ...first.activities.map((a: { id: string }) => ({ id: a.id })),
+              {
+                name: "מוזיאון חדש",
+                description: "הצעה מהשיחה",
+                time: "16:00-18:00",
+                category: "attraction",
+                source: "ai",
+                id: "ai-refined",
+              },
+            ],
+          },
+        ],
+      });
+    }
     if (path.includes("/functions/v1/"))
       return respond(
         { error: "שירות המידע אינו זמין כרגע. אפשר להמשיך לתכנן ידנית." },

@@ -13,3 +13,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.unsplash-image]
 verify_jwt = false
+[functions.refine-itinerary]
+verify_jwt = false

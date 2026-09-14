@@ -77,6 +77,8 @@ import {
 import { getPlace, getRoute, invoke, searchPlaces } from "@/lib/api";
 import { pickPlace } from "@/lib/places-match";
 import { LodgingGhost } from "./StopBodies";
+import { RefinePanel, type ChatMessage } from "./RefinePanel";
+import { compactPlan, mergeRefinement } from "@/lib/refine";
 import { placeCacheFresh, withPlaceCache } from "@/lib/place-cache";
 import { destinationImage } from "@/lib/destinations";
 import { supabase } from "@/integrations/supabase/client";
@@ -85,6 +87,7 @@ import type {
   Day,
   PlaceDetails,
   PlacePhoto,
+  RefineResponse,
   TripPlan,
   TripRecord,
 } from "@/types/itinerary";
@@ -133,6 +136,8 @@ export function TripWorkspace({
     [generating, setGenerating] = useState(false),
     [aiError, setAiError] = useState(""),
     [swapping, setSwapping] = useState<string | null>(null),
+    [chat, setChat] = useState<ChatMessage[]>([]),
+    [refining, setRefining] = useState(false),
     [sharing, setSharing] = useState(false),
     [mode, setMode] = useState<"WALK" | "DRIVE">("WALK"),
     [details, setDetails] = useState<Record<string, PlaceDetails>>({});
@@ -465,6 +470,66 @@ export function TripWorkspace({
       });
     }
   }, [plan.days, plan.metadata.destination, day, readOnly, generating, edit]);
+  // Chat refinement: the model returns only changed days; kept stops keep
+  // their verified place data, new ones go through the usual auto-link.
+  const undoSnapshot = useRef<TripPlan | null>(null);
+  const refine = async (message: string) => {
+    const before = currentPlan.current;
+    setChat((c) => [...c, { id: uid(), role: "user", text: message }]);
+    setRefining(true);
+    try {
+      const result = await invoke<RefineResponse>(
+        "refine-itinerary",
+        compactPlan(before, day === "all" ? null : day, message),
+      );
+      if (!alive.current) return;
+      const { plan: next, summary } = mergeRefinement(
+        currentPlan.current,
+        result,
+      );
+      const changed = next !== currentPlan.current;
+      if (changed) {
+        undoSnapshot.current = before;
+        edit(next);
+        if (summary.days.length === 1 && day !== summary.days[0])
+          setDay(summary.days[0]);
+      }
+      setChat((c) => [
+        ...c.map((m) => ({ ...m, canUndo: false })),
+        {
+          id: uid(),
+          role: "assistant",
+          text:
+            result.reply ||
+            (changed ? "עדכנתי את המסלול." : "לא שיניתי דבר במסלול."),
+          summary: changed ? summary : undefined,
+          canUndo: changed,
+        },
+      ]);
+    } catch (e) {
+      if (alive.current)
+        setChat((c) => [
+          ...c,
+          {
+            id: uid(),
+            role: "error",
+            text: e instanceof Error ? e.message : "העדכון נכשל",
+          },
+        ]);
+    } finally {
+      if (alive.current) setRefining(false);
+    }
+  };
+  const undoRefine = (id: string) => {
+    const snapshot = undoSnapshot.current;
+    if (!snapshot) return;
+    undoSnapshot.current = null;
+    edit(snapshot);
+    setChat((c) =>
+      c.map((m) => (m.id === id ? { ...m, canUndo: false, undone: true } : m)),
+    );
+    toast("השינוי בוטל");
+  };
   const swap = async (a: Activity, dayNumber: number | "saved") => {
     setSwapping(a.id);
     try {
@@ -924,6 +989,15 @@ export function TripWorkspace({
                         </button>
                       ))}
                     </div>
+                    {!readOnly && (
+                      <RefinePanel
+                        messages={chat}
+                        busy={refining}
+                        disabled={generating}
+                        onSend={(text) => void refine(text)}
+                        onUndo={undoRefine}
+                      />
+                    )}
                     {generating && (
                       <>
                         <div className="ai-progress" role="status">
