@@ -10,6 +10,10 @@ export const initialPlan: TripPlan = {
     startDate: "2026-10-04",
     endDate: "2026-10-06",
     travelers: 2,
+    travelersList: [
+      { id: "t1", name: "דנה" },
+      { id: "t2", name: "יובל" },
+    ],
     interests: [],
     targetBudget: 3000,
   },
@@ -121,10 +125,7 @@ export async function setup(page: Page, authenticated = true) {
           JSON.stringify(session),
         );
         // The one-time profile nudge must not steal focus in the specs.
-        localStorage.setItem(
-          `planatrip:profile-nudge:${session.user.id}`,
-          "1",
-        );
+        localStorage.setItem(`planatrip:profile-nudge:${session.user.id}`, "1");
       },
       { project, session },
     );

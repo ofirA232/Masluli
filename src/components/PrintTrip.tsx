@@ -1,4 +1,5 @@
 import type { Activity, TripPlan } from "@/types/itinerary";
+import { balances, settleUp } from "@/lib/budget";
 import {
   budgetTotals,
   dayDate,
@@ -118,12 +119,36 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
         <p>האומדן וההוצאות מוצגים בנפרד. אומדנים אינם הצעת מחיר.</p>
         {!!plan.expenses.length && (
           <ul>
-            {plan.expenses.map((e) => (
-              <li key={e.id}>
-                {e.label}: {money(e.amount)}
-              </li>
-            ))}
+            {plan.expenses.map((e) => {
+              const payer = plan.metadata.travelersList.find(
+                (t) => t.id === e.paidBy,
+              );
+              return (
+                <li key={e.id}>
+                  {e.label}: {money(e.amountIls)}
+                  {e.currency !== "ILS" ? ` (${e.amount} ${e.currency})` : ""}
+                  {payer ? ` · שילם/ה ${payer.name}` : ""}
+                </li>
+              );
+            })}
           </ul>
+        )}
+        {settleUp(balances(plan)).length > 0 && (
+          <>
+            <h3>התחשבנות</h3>
+            <ul>
+              {settleUp(balances(plan)).map((t, i) => {
+                const name = (id: string) =>
+                  plan.metadata.travelersList.find((v) => v.id === id)?.name ||
+                  id;
+                return (
+                  <li key={i}>
+                    {name(t.from)} מעביר/ה ל{name(t.to)} {money(t.amount)}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
       </section>
       {plan.notes && (

@@ -4,11 +4,14 @@ import type {
   Activity,
   Category,
   Estimate,
+  Expense,
+  ExpenseSplit,
   ItineraryRequest,
   LodgingKind,
   LodgingStay,
   TransportLeg,
   TransportMode,
+  Traveler,
   TripPlan,
 } from "@/types/itinerary";
 
@@ -103,6 +106,7 @@ export function createPlan(request: ItineraryRequest): TripPlan {
       startDate: input.startDate,
       endDate: input.endDate,
       travelers: input.travelers,
+      travelersList: defaultTravelers(input.travelers),
       interests: input.interests || [],
       targetBudget: input.budget ? Number(input.budget) : null,
     },
@@ -309,9 +313,97 @@ export function normalizeActivity(
   }
   return result;
 }
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+export const travelerName = (index: number) => `מטייל ${index + 1}`;
+/** Deterministic ids so normalizing an old trip is idempotent. */
+export const defaultTravelers = (count: number): Traveler[] =>
+  Array.from({ length: count }, (_, i) => ({
+    id: `t${i + 1}`,
+    name: travelerName(i),
+  }));
+/** The named list wins; a bare count from an older trip becomes t1..tN. */
+export function normalizeTravelers(meta: Record<string, unknown>): Traveler[] {
+  const seen = new Set<string>();
+  const list: Traveler[] = [];
+  for (const v of Array.isArray(meta.travelersList) ? meta.travelersList : []) {
+    const t = object(v);
+    const id = str(t.id).trim().slice(0, 50);
+    if (!id || seen.has(id) || list.length >= 20) continue;
+    seen.add(id);
+    list.push({
+      id,
+      name: str(t.name).trim().slice(0, 40) || travelerName(list.length),
+    });
+  }
+  if (list.length) return list;
+  const count =
+    finite(meta.travelers) && Number(meta.travelers) >= 1
+      ? Math.min(20, Math.floor(Number(meta.travelers)))
+      : 1;
+  return defaultTravelers(count);
+}
+/** Older expenses become ILS, paid by nobody, split equally. */
+export function normalizeExpense(
+  value: unknown,
+  travelerIds: Set<string>,
+): Expense | null {
+  const e = object(value);
+  if (!finite(e.amount)) return null;
+  const amount = Number(e.amount);
+  const currency = /^[A-Z]{3}$/.test(str(e.currency)) ? str(e.currency) : "ILS";
+  const rate =
+    currency === "ILS"
+      ? 1
+      : typeof e.rate === "number" && Number.isFinite(e.rate) && e.rate > 0
+        ? e.rate
+        : 1;
+  const amountIls = finite(e.amountIls)
+    ? Number(e.amountIls)
+    : round2(amount * rate);
+  const paidBy =
+    str(e.paidBy) && travelerIds.has(str(e.paidBy)) ? str(e.paidBy) : null;
+  const s = object(e.split),
+    shares = object(s.shares);
+  const known = Object.entries(shares).filter(([k]) => travelerIds.has(k));
+  let split: ExpenseSplit = { type: "equal", shares: {} };
+  if (s.type === "custom") {
+    const custom = known.filter(
+      ([, v]) => typeof v === "number" && Number.isFinite(v) && v >= 0,
+    ) as [string, number][];
+    const sum = custom.reduce((n, [, v]) => n + v, 0);
+    if (
+      custom.length &&
+      custom.length === Object.keys(shares).length &&
+      Math.abs(sum - amount) <= 0.01
+    )
+      split = { type: "custom", shares: Object.fromEntries(custom) };
+  } else {
+    split = {
+      type: "equal",
+      shares: Object.fromEntries(known.map(([k]) => [k, 1])),
+    };
+  }
+  return {
+    id: str(e.id) || uid(),
+    label: str(e.label),
+    amount,
+    currency,
+    rate,
+    amountIls,
+    category: Object.prototype.hasOwnProperty.call(categories, str(e.category))
+      ? (e.category as Category)
+      : "attraction",
+    activityId: str(e.activityId) || undefined,
+    date: dateOnly(e.date),
+    paidBy,
+    split,
+  };
+}
 export function normalizePlan(value: unknown, destination = ""): TripPlan {
   const raw = object(value),
     meta = object(raw.metadata);
+  const travelersList = normalizeTravelers(meta);
+  const travelerIds = new Set(travelersList.map((t) => t.id));
   const used = new Set<string>();
   const activity = (v: unknown) => {
     const a = normalizeActivity(v);
@@ -333,10 +425,8 @@ export function normalizePlan(value: unknown, destination = ""): TripPlan {
       destination: str(meta.destination) || destination,
       startDate: dateOnly(meta.startDate),
       endDate: dateOnly(meta.endDate),
-      travelers:
-        finite(meta.travelers) && Number(meta.travelers) >= 1
-          ? Math.min(20, Math.floor(Number(meta.travelers)))
-          : 1,
+      travelers: travelersList.length,
+      travelersList,
       interests: Array.isArray(meta.interests)
         ? meta.interests.filter((v) => typeof v === "string")
         : [],
@@ -349,22 +439,8 @@ export function normalizePlan(value: unknown, destination = ""): TripPlan {
       activity,
     ),
     expenses: (Array.isArray(raw.expenses) ? raw.expenses : [])
-      .filter((v) => finite(object(v).amount))
-      .map((v) => {
-        const e = object(v);
-        return {
-          id: str(e.id) || uid(),
-          label: str(e.label),
-          amount: Number(e.amount),
-          category: Object.prototype.hasOwnProperty.call(
-            categories,
-            str(e.category),
-          )
-            ? (e.category as Category)
-            : "attraction",
-          activityId: str(e.activityId) || undefined,
-        };
-      }),
+      .map((v) => normalizeExpense(v, travelerIds))
+      .filter((e): e is Expense => e !== null),
     notes: str(raw.notes),
   };
   const cover = object(raw.cover);
@@ -453,6 +529,6 @@ export function budgetTotals(plan: TripPlan) {
       0,
     ),
     unknown: scheduled.filter((a) => !a.estimate).length,
-    actual: plan.expenses.reduce((sum, e) => sum + e.amount, 0),
+    actual: round2(plan.expenses.reduce((sum, e) => sum + e.amountIls, 0)),
   };
 }

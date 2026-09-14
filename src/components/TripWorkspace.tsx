@@ -39,6 +39,7 @@ import {
   MapPin,
   Plus,
   Printer,
+  Settings2,
   Share2,
   Sparkles,
   Users,
@@ -779,6 +780,16 @@ export function TripWorkspace({
         >
           <Printer />
         </Button>
+        {!readOnly && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="פרטי הטיול והמטיילים"
+            onClick={() => setSettings(true)}
+          >
+            <Settings2 />
+          </Button>
+        )}
         <Button
           variant="outline"
           disabled={sharing}

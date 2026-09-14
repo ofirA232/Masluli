@@ -131,8 +131,14 @@ describe("editing and budget", () => {
         id: "e",
         label: "paid",
         amount: 15,
+        currency: "ILS",
+        rate: 1,
+        amountIls: 15,
         category: "attraction",
         activityId: "a",
+        date: null,
+        paidBy: null,
+        split: { type: "equal", shares: {} },
       },
     ];
     expect(budgetTotals(p)).toEqual({

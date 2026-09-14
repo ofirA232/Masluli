@@ -87,21 +87,42 @@ export interface Estimate {
   source: "manual" | "ai";
   currency: "ILS";
 }
+export interface Traveler {
+  id: string;
+  name: string;
+}
 export interface TripMetadata {
   title: string;
   destination: string;
   startDate: string | null;
   endDate: string | null;
+  /** Always equals travelersList.length; kept for older code paths. */
   travelers: number;
+  travelersList: Traveler[];
   interests: string[];
   targetBudget: number | null;
+}
+/** equal: keys are the participants (empty = everyone); custom: amounts in `currency`. */
+export interface ExpenseSplit {
+  type: "equal" | "custom";
+  shares: Record<string, number>;
 }
 export interface Expense {
   id: string;
   label: string;
+  /** In `currency`. */
   amount: number;
+  /** ISO 4217, default ILS. */
+  currency: string;
+  /** ILS per one unit of `currency`; 1 for ILS. Frozen at entry. */
+  rate: number;
+  amountIls: number;
   category: Category;
   activityId?: string;
+  date: string | null;
+  /** Traveler id, or null when nobody in particular paid. */
+  paidBy: string | null;
+  split: ExpenseSplit;
 }
 export interface CoverPhoto {
   url: string;

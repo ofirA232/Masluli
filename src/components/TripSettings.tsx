@@ -6,7 +6,9 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { TravelersEditor } from "./TravelersEditor";
 import { dayCount, dateOnly } from "@/lib/trips";
+import { pruneTravelerRefs } from "@/lib/budget";
 import type { TripPlan } from "@/types/itinerary";
 export function TripSettings({
   plan,
@@ -19,6 +21,12 @@ export function TripSettings({
 }) {
   const [meta, setMeta] = useState(plan.metadata),
     [error, setError] = useState("");
+  const inUse = new Set(
+    plan.expenses.flatMap((e) => [
+      ...(e.paidBy ? [e.paidBy] : []),
+      ...Object.keys(e.split.shares),
+    ]),
+  );
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -48,7 +56,17 @@ export function TripSettings({
         (_, i) => days[i] || { day_number: i + 1, activities: [] },
       );
     }
-    onSave({ ...plan, metadata: meta, days, saved_places: saved });
+    const travelersList = meta.travelersList.map((t, i) => ({
+      ...t,
+      name: t.name.trim() || `מטייל ${i + 1}`,
+    }));
+    onSave({
+      ...plan,
+      metadata: { ...meta, travelersList, travelers: travelersList.length },
+      days,
+      saved_places: saved,
+      expenses: pruneTravelerRefs(plan.expenses, travelersList),
+    });
     onClose();
   };
   return (
@@ -58,7 +76,7 @@ export function TripSettings({
         if (!v) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent className="activity-dialog">
         <DialogTitle>פרטי הטיול</DialogTitle>
         <DialogDescription>
           הטיול משתנה איתכם. שינוי התאריכים שומר את התחנות שלכם.
@@ -95,19 +113,6 @@ export function TripSettings({
               />
             </label>
             <label className="field">
-              <span>מספר מטיילים</span>
-              <input
-                type="number"
-                required
-                min="1"
-                max="20"
-                value={meta.travelers}
-                onChange={(e) =>
-                  setMeta({ ...meta, travelers: Number(e.target.value) })
-                }
-              />
-            </label>
-            <label className="field">
               <span>תקציב בשקלים</span>
               <input
                 type="number"
@@ -124,6 +129,20 @@ export function TripSettings({
               />
             </label>
           </div>
+          <fieldset>
+            <legend>מי נוסע ({meta.travelersList.length})</legend>
+            <TravelersEditor
+              value={meta.travelersList}
+              inUse={inUse}
+              onChange={(travelersList) =>
+                setMeta({
+                  ...meta,
+                  travelersList,
+                  travelers: travelersList.length,
+                })
+              }
+            />
+          </fieldset>
           {error && (
             <p role="alert" className="form-error">
               {error}
