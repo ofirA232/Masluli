@@ -1,4 +1,4 @@
-import { ApiError, textInput } from "./http.ts";
+import { ApiError, recordUsage, textInput } from "./http.ts";
 export const categories = [
   "attraction",
   "restaurant",
@@ -105,6 +105,7 @@ export const systemPrompt = `You propose travel itineraries, using Hebrew for na
 export async function callAi(
   instruction: string,
   data: unknown,
+  tripId?: string,
 ): Promise<Record<string, unknown>> {
   const key = Deno.env.get("OPENROUTER_API_KEY");
   if (!key)
@@ -112,6 +113,11 @@ export async function callAi(
       503,
       "עוזר ה־AI עדיין לא זמין. אפשר להתחיל לתכנן ידנית.",
     );
+  const model =
+    // Stronger than the previous flash-lite default: place names and the JSON
+    // shape come back more reliably, which is what the place lookup depends
+    // on. Override per project with OPENROUTER_MODEL.
+    Deno.env.get("OPENROUTER_MODEL") || "anthropic/claude-haiku-4.5";
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
     {
@@ -122,8 +128,7 @@ export async function callAi(
         "X-Title": "Planatrip",
       },
       body: JSON.stringify({
-        model:
-          Deno.env.get("OPENROUTER_MODEL") || "google/gemini-2.5-flash-lite",
+        model,
         messages: [
           { role: "system", content: systemPrompt + "\n" + instruction },
           { role: "user", content: JSON.stringify(data) },
@@ -135,20 +140,59 @@ export async function callAi(
       signal: AbortSignal.timeout(90000),
     },
   );
-  if (!response.ok)
+  if (!response.ok) {
+    // The upstream reason (unknown model, no credit, rate limit) is only
+    // visible in the function logs; travellers get a plain message.
+    const detail = await response.text().catch(() => "");
+    console.error(
+      `openrouter ${response.status} for model ${model}: ${detail.slice(0, 500)}`,
+    );
     throw new ApiError(
       response.status === 429 ? 429 : 502,
-      "שירות ה־AI עמוס כרגע. אפשר לנסות שוב בהמשך.",
+      response.status === 401 ||
+        response.status === 402 ||
+        response.status === 403
+        ? "עוזר ה־AI אינו זמין כרגע בגלל הגדרות החשבון. אפשר להמשיך לתכנן ידנית."
+        : "שירות ה־AI עמוס כרגע. אפשר לנסות שוב בהמשך.",
     );
+  }
   const result = await response.json();
+  // OpenRouter reports what the model actually consumed, so the cost of a
+  // generation is measured rather than estimated.
+  const used = result.usage || {};
+  if (used.prompt_tokens || used.completion_tokens) {
+    recordUsage({
+      service: "ai",
+      sku: "ai_input_token",
+      units: used.prompt_tokens || 0,
+      model,
+      tripId,
+      inputTokens: used.prompt_tokens || 0,
+      outputTokens: used.completion_tokens || 0,
+    });
+    recordUsage({
+      service: "ai",
+      sku: "ai_output_token",
+      units: used.completion_tokens || 0,
+      model,
+      tripId,
+    });
+  }
   const content = result.choices?.[0]?.message?.content;
-  if (typeof content !== "string")
+  if (typeof content !== "string") {
+    console.error(
+      `openrouter returned no content for model ${model}: ${JSON.stringify(result).slice(0, 500)}`,
+    );
     throw new ApiError(502, "התקבלה תשובה ריקה מעוזר ה־AI");
+  }
   try {
     return JSON.parse(
       content.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, ""),
     );
   } catch {
+    console.error(
+      `openrouter returned unparsable JSON from model ${model}: ${content.slice(0, 300)}`,
+    );
     throw new ApiError(502, "לא הצלחנו לעבד את המסלול. נסו שוב.");
   }
 }

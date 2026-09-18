@@ -125,6 +125,45 @@ export async function quota(
       throw new ApiError(429, "הגענו למכסת הבקשות. אפשר לנסות שוב בהמשך.");
   }
 }
+/**
+ * Records one paid provider call for cost analysis. Never throws and never
+ * blocks the response: a missing usage row must not fail a traveller request.
+ */
+export function recordUsage(entry: {
+  service: string;
+  sku: string;
+  units?: number;
+  tripId?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+}) {
+  try {
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { persistSession: false } },
+    );
+    const trip = /^[0-9a-f-]{36}$/i.test(entry.tripId || "")
+      ? entry.tripId
+      : null;
+    void admin
+      .rpc("record_provider_usage", {
+        p_service: entry.service,
+        p_sku: entry.sku,
+        p_units: entry.units ?? 1,
+        p_trip: trip,
+        p_model: entry.model ?? null,
+        p_input: entry.inputTokens ?? null,
+        p_output: entry.outputTokens ?? null,
+      })
+      .then(({ error }) => {
+        if (error) console.error("usage not recorded: " + error.message);
+      });
+  } catch (e) {
+    console.error("usage not recorded: " + (e as Error).message);
+  }
+}
 export function googleKey() {
   const key = Deno.env.get("GOOGLE_MAPS_SERVER_KEY");
   if (!key)

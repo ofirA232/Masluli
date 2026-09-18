@@ -20,6 +20,7 @@ Deno.serve((req) =>
       await callAi(
         "Return ONE replacement activity as a JSON object. It must differ from the rejected activity.",
         input,
+        typeof body.tripId === "string" ? body.tripId : undefined,
       ),
     );
   }),
