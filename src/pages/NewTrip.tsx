@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { ArrowRight, Compass } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
 import { TripForm, requestKey } from "@/components/TripForm";
+import { SplitWords } from "@/components/SplitWords";
 import { useAuthState } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { createPlan } from "@/lib/trips";
@@ -42,32 +43,18 @@ export default function NewTrip() {
   return (
     <>
       <SiteHeader />
-      <main className="new-trip-page section-wrap">
-        <Link to="/" className="text-link">
-          <ArrowRight size={16} />
-          בחזרה להשראה
-        </Link>
-        <div className="new-trip-layout">
+      <main className="new-trip-page">
+        <div className="section-wrap">
+          <Link to="/" className="text-link">
+            <ArrowRight size={16} />
+            בחזרה להשראה
+          </Link>
           <div className="new-trip-copy">
             <span className="eyebrow">התחלה של משהו טוב</span>
             <h1>
-              כל טיול גדול
-              <br />
-              מתחיל ב״לאן?״
+              <SplitWords text="כל טיול גדול מתחיל ב״לאן?״" delay={0.05} />
             </h1>
-            <p>
-              כמה פרטים קטנים, ואתם בדרך.
-              <br />
-              תמיד אפשר לשנות, להזיז ולגלות עוד.
-            </p>
-            <div className="journey-stamp">
-              <Compass size={62} />
-              <span dir="ltr">
-                GO SOMEWHERE
-                <br />
-                THAT STAYS WITH YOU.
-              </span>
-            </div>
+            <p>כמה פרטים קטנים, ואתם בדרך. תמיד אפשר לשנות, להזיז ולגלות עוד.</p>
           </div>
           <div className="form-card">
             <h2>בואו נכיר את הטיול שלכם</h2>

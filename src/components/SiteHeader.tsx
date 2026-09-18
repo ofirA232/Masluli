@@ -1,6 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
 import {
-  ArrowUpLeft,
   Compass,
   LogOut,
   Menu,
@@ -22,11 +21,40 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { ProfileDialog } from "./ProfileDialog";
-export function SiteHeader({ compact = false }: { compact?: boolean }) {
+import { destinations } from "@/lib/destinations";
+import { CtaLabel } from "./CtaLabel";
+export function SiteHeader({
+  compact = false,
+  tone = "light",
+}: {
+  compact?: boolean;
+  tone?: "light" | "mint";
+}) {
   const { user } = useAuthState();
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { exists, loaded } = useTravelerProfile();
+  // Tuck the header away while scrolling down and bring it back on the way up.
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    if (compact) return;
+    let last = window.scrollY,
+      frame = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (Math.abs(y - last) < 8) return;
+        setTucked(y > last && y > 120);
+        last = y;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, [compact]);
   // Invite each account once to fill in its taste, never mid-planning.
   useEffect(() => {
     if (!user || compact || !loaded || exists) return;
@@ -44,7 +72,10 @@ export function SiteHeader({ compact = false }: { compact?: boolean }) {
     });
   }, [user, compact, loaded, exists]);
   return (
-    <header className={`site-header ${compact ? "compact" : ""}`}>
+    <header
+      className={`site-header tone-${tone} ${compact ? "compact" : ""}`}
+      data-tucked={tucked && !open}
+    >
       <div className="header-inner">
         <Link to="/" className="brand" aria-label="Planatrip — דף הבית">
           <span className="brand-symbol">
@@ -101,9 +132,9 @@ export function SiteHeader({ compact = false }: { compact?: boolean }) {
             </Link>
           )}
           {!compact && (
-            <Button asChild className="header-cta">
+            <Button asChild className="header-cta cta-arrow">
               <Link to="/trip/new">
-                טיול חדש <ArrowUpLeft size={16} />
+                <CtaLabel>טיול חדש</CtaLabel>
               </Link>
             </Button>
           )}
@@ -126,15 +157,48 @@ export function SiteHeader({ compact = false }: { compact?: boolean }) {
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <Link to="/" className="brand" dir="ltr">
+      <div className="footer-panel">
+        <div className="footer-columns">
+          <nav aria-label="מפת האתר" data-reveal>
+            <span className="eyebrow">מפת האתר</span>
+            <Link to="/">מגלים עולם</Link>
+            <Link to="/my-trips">הטיולים שלי</Link>
+            <Link to="/trip/new">מתכננים טיול</Link>
+          </nav>
+          <nav aria-label="יעדים" data-reveal style={{ ["--reveal-delay" as string]: "80ms" }}>
+            <span className="eyebrow">לאן נוסעים</span>
+            {destinations.map((d) => (
+              <Link
+                key={d.name}
+                to={`/trip/new?destination=${encodeURIComponent(d.name)}`}
+              >
+                {d.name}
+              </Link>
+            ))}
+          </nav>
+          <div
+            className="footer-pitch"
+            data-reveal
+            style={{ ["--reveal-delay" as string]: "160ms" }}
+          >
+            <span className="eyebrow">פחות לתכנן</span>
+            <p>יותר להתרגש מהדרך. כל הטיול, המפה והתקציב במקום אחד.</p>
+            <Button asChild size="lg" className="cta-arrow">
+              <Link to="/trip/new">
+                <CtaLabel>מתחילים לתכנן</CtaLabel>
+              </Link>
+            </Button>
+          </div>
+        </div>
+        <div className="footer-legal">
+          <Link to="/privacy">פרטיות</Link>
+          <Link to="/terms">תנאי שימוש</Link>
+          <span>© {new Date().getFullYear()} Planatrip</span>
+        </div>
+      </div>
+      <Link to="/" className="footer-wordmark" dir="ltr" aria-label="Planatrip — דף הבית">
         planatrip.
       </Link>
-      <p>פחות לתכנן. יותר להתרגש מהדרך.</p>
-      <div>
-        <Link to="/privacy">פרטיות</Link>
-        <Link to="/terms">תנאי שימוש</Link>
-        <span>© {new Date().getFullYear()} Planatrip</span>
-      </div>
     </footer>
   );
 }

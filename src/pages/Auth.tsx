@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Compass, ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActivePill } from "@/components/ActivePill";
 import { supabase } from "@/integrations/supabase/client";
 import { hasSupabase } from "@/lib/config";
 import { validatePassword } from "@/lib/password-validation";
@@ -115,6 +116,7 @@ export default function Auth() {
               }}
               className={mode === "login" ? "active" : ""}
             >
+              {mode === "login" && <ActivePill group="auth-tab" />}
               כניסה לחשבון
             </button>
             <button
@@ -124,6 +126,7 @@ export default function Auth() {
               }}
               className={mode === "signup" ? "active" : ""}
             >
+              {mode === "signup" && <ActivePill group="auth-tab" />}
               הרשמה
             </button>
           </div>
