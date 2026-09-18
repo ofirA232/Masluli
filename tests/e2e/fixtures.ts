@@ -68,6 +68,13 @@ export const initialPlan: TripPlan = {
   expenses: [],
   notes: "",
 };
+// The trip form keeps both dates in one popover field.
+export async function setDates(page: Page, start: string, end: string) {
+  await page.locator(".dates-trigger").click();
+  await page.locator("[name=startDate]").fill(start);
+  await page.locator("[name=endDate]").fill(end);
+  await page.keyboard.press("Escape");
+}
 export async function setup(page: Page, authenticated = true) {
   const state = {
     row: {

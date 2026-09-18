@@ -1,20 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  CalendarDays,
-  MapPin,
-  Users,
-  Sparkles,
-  ArrowLeft,
-  Loader2,
-  Wallet,
-} from "lucide-react";
+import { MapPin, Sparkles, ArrowLeft, Loader2, Wallet, X } from "lucide-react";
 import { useAuthState } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { requestSchema } from "@/lib/trips";
 import { invoke } from "@/lib/api";
 import type { ItineraryRequest } from "@/types/itinerary";
 import { interestOptions as interests } from "@/lib/preferences";
+import { TripDates } from "./TripDates";
+import { TravelersField } from "./TravelersField";
 export const requestKey = "planatrip:new-trip";
 export function TripForm({
   compact = false,
@@ -61,7 +55,14 @@ export function TripForm({
     [suggestions, setSuggestions] = useState<{ id: string; name: string }[]>(
       [],
     );
-  const [focused, setFocused] = useState(false);
+  const [focused, setFocused] = useState(false),
+    [highlight, setHighlight] = useState(-1);
+  const listOpen = focused && suggestions.length > 0;
+  const choose = (name: string) => {
+    setForm((f) => ({ ...f, destination: name }));
+    setHighlight(-1);
+    setFocused(false);
+  };
   useEffect(() => {
     try {
       sessionStorage.setItem(requestKey, JSON.stringify(form));
@@ -70,7 +71,9 @@ export function TripForm({
     }
   }, [form]);
   useEffect(() => {
-    if (!user || !focused || form.destination.length < 2) {
+    // Each keystroke past this point is a paid autocomplete request, so wait
+    // for a third character and a longer pause.
+    if (!user || !focused || form.destination.length < 3) {
       setSuggestions([]);
       return;
     }
@@ -87,7 +90,7 @@ export function TripForm({
           .catch(() => {
             if (active) setSuggestions([]);
           }),
-      400,
+      600,
     );
     return () => {
       active = false;
@@ -129,25 +132,67 @@ export function TripForm({
           <input
             name="destination"
             value={form.destination}
+            role="combobox"
+            aria-expanded={listOpen}
+            aria-controls="destination-options"
+            aria-autocomplete="list"
+            aria-activedescendant={
+              listOpen && highlight >= 0
+                ? "destination-option-" + highlight
+                : undefined
+            }
             onFocus={() => setFocused(true)}
             onBlur={() => setTimeout(() => setFocused(false), 150)}
-            onChange={(e) => setForm({ ...form, destination: e.target.value })}
+            onChange={(e) => {
+              setHighlight(-1);
+              setForm({ ...form, destination: e.target.value });
+            }}
+            onKeyDown={(e) => {
+              if (!listOpen) return;
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const step = e.key === "ArrowDown" ? 1 : -1;
+                setHighlight(
+                  (highlight + step + suggestions.length) % suggestions.length,
+                );
+              } else if (e.key === "Enter" && highlight >= 0) {
+                e.preventDefault();
+                choose(suggestions[highlight].name);
+              } else if (e.key === "Escape") setFocused(false);
+            }}
             placeholder="עיר, אזור או מדינה"
             maxLength={100}
             required
             autoComplete="off"
           />
-          {suggestions.length > 0 && focused && (
-            <div className="suggestions">
-              {suggestions.map((s) => (
+          {!!form.destination && (
+            <button
+              type="button"
+              className="field-clear"
+              aria-label="ניקוי היעד"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setForm({ ...form, destination: "" })}
+            >
+              <X size={15} />
+            </button>
+          )}
+          {listOpen && (
+            <div
+              className="suggestions"
+              id="destination-options"
+              role="listbox"
+            >
+              {suggestions.map((s, i) => (
                 <button
                   type="button"
                   key={s.id}
+                  id={"destination-option-" + i}
+                  role="option"
+                  aria-selected={i === highlight}
+                  className={i === highlight ? "is-highlighted" : ""}
+                  onMouseEnter={() => setHighlight(i)}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setForm({ ...form, destination: s.name });
-                    setFocused(false);
-                  }}
+                  onClick={() => choose(s.name)}
                 >
                   <MapPin size={14} />
                   {s.name}
@@ -157,54 +202,15 @@ export function TripForm({
             </div>
           )}
         </label>
-        <label className="field">
-          <span>
-            <CalendarDays size={16} />
-            יוצאים בתאריך
-          </span>
-          <input
-            name="startDate"
-            aria-label="תאריך התחלה"
-            type="date"
-            value={form.startDate}
-            onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-            required
-          />
-        </label>
-        <label className="field">
-          <span>
-            <CalendarDays size={16} />
-            חוזרים בתאריך
-          </span>
-          <input
-            name="endDate"
-            aria-label="תאריך סיום"
-            type="date"
-            value={form.endDate}
-            min={form.startDate}
-            onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-            required
-          />
-        </label>
-        <label className="field travelers-field">
-          <span>
-            <Users size={16} />
-            מי מצטרף?
-          </span>
-          <select
-            aria-label="מספר מטיילים"
-            value={form.travelers}
-            onChange={(e) =>
-              setForm({ ...form, travelers: Number(e.target.value) })
-            }
-          >
-            {Array.from({ length: 20 }, (_, i) => (
-              <option key={i} value={i + 1}>
-                {i + 1} {i === 0 ? "מטייל" : "מטיילים"}
-              </option>
-            ))}
-          </select>
-        </label>
+        <TripDates
+          startDate={form.startDate}
+          endDate={form.endDate}
+          onChange={(dates) => setForm({ ...form, ...dates })}
+        />
+        <TravelersField
+          travelers={form.travelers}
+          onChange={(travelers) => setForm({ ...form, travelers })}
+        />
         {compact && (
           <Button type="submit" size="lg" className="plan-submit">
             בואו נתכנן <ArrowLeft size={18} />

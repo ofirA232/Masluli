@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { setup, tripId } from "./fixtures";
+import { setDates, setup, tripId } from "./fixtures";
 test("homepage and mobile layout remain usable", async ({ page }) => {
   await setup(page, false);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -30,8 +30,7 @@ test("manual creation, autosave, movement, budget and reload", async ({
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/trip/new");
   await page.locator("[name=destination]").fill("פריז");
-  await page.locator("[name=startDate]").fill("2026-10-04");
-  await page.locator("[name=endDate]").fill("2026-10-06");
+  await setDates(page, "2026-10-04", "2026-10-06");
   await page.getByRole("radio").nth(1).check();
   await page.getByRole("button", { name: "יוצרים את הטיול שלי" }).click();
   await expect(page).toHaveURL(new RegExp("/trip/" + tripId));
@@ -105,8 +104,7 @@ test("AI generation renders before optional provider enrichment", async ({
   const state = await setup(page);
   await page.goto("/trip/new");
   await page.locator("[name=destination]").fill("פריז");
-  await page.locator("[name=startDate]").fill("2026-10-04");
-  await page.locator("[name=endDate]").fill("2026-10-04");
+  await setDates(page, "2026-10-04", "2026-10-04");
   await page.getByRole("button", { name: "יוצרים את הטיול שלי" }).click();
   await expect(page.locator(".activity-title")).toHaveText("הצעת AI ליום 1");
   await expect(page.locator(".verification-note")).toContainText(
@@ -174,8 +172,7 @@ test("trip details survive the login handoff", async ({ page }) => {
   await setup(page, false);
   await page.goto("/");
   await page.locator("[name=destination]").fill("רומא");
-  await page.locator("[name=startDate]").fill("2026-11-02");
-  await page.locator("[name=endDate]").fill("2026-11-05");
+  await setDates(page, "2026-11-02", "2026-11-05");
   await page.getByRole("button", { name: "בואו נתכנן" }).click();
   await expect(page).toHaveURL(/\/auth/);
   await page.getByLabel("כתובת אימייל").fill("traveler@example.test");
@@ -183,6 +180,7 @@ test("trip details survive the login handoff", async ({ page }) => {
   await page.getByRole("button", { name: "נכנסים וממשיכים לתכנן" }).click();
   await expect(page).toHaveURL(/\/trip\/new/);
   await expect(page.locator("[name=destination]")).toHaveValue("רומא");
+  await page.locator(".dates-trigger").click();
   await expect(page.locator("[name=startDate]")).toHaveValue("2026-11-02");
 });
 
