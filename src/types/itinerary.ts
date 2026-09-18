@@ -148,6 +148,12 @@ export interface TripRecord {
   share_token?: string | null;
   user_id?: string | null;
 }
+/** Where a destination sits, used to reject matches from another country. */
+export interface PlaceArea {
+  lat: number;
+  lng: number;
+  radius: number;
+}
 export interface PlaceDetails {
   id: string;
   name: string;

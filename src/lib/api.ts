@@ -6,6 +6,7 @@ import type {
   RouteResult,
   TripAccess,
   TripPlan,
+  PlaceArea,
 } from "@/types/itinerary";
 import type { Json } from "@/integrations/supabase/types";
 export async function invoke<T>(name: string, body: unknown): Promise<T> {
@@ -25,12 +26,42 @@ export async function invoke<T>(name: string, body: unknown): Promise<T> {
   if (data?.error) throw new Error(data.error);
   return data as T;
 }
-export const searchPlaces = (query: string, destination: string) =>
-  invoke<{ places: PlaceDetails[] }>("places", {
+type SearchResult = { places: PlaceDetails[]; area?: PlaceArea | null };
+// Where each destination sits, resolved once per session. The first search
+// for a destination carries the lookup; searches that start while it is in
+// flight wait for it and send the area along, so the server (which bills a Pro
+// text search for the lookup) is asked once rather than once per stop.
+const areas = new Map<string, Promise<PlaceArea | null>>();
+/** tripId is analytics only: it attributes cost to a trip, never authorizes. */
+export async function searchPlaces(
+  query: string,
+  destination: string,
+  tripId?: string,
+): Promise<SearchResult> {
+  const key = destination.trim().toLowerCase();
+  const pending = areas.get(key);
+  const area = pending ? await pending : null;
+  const request = invoke<SearchResult>("places", {
     action: "search",
     query,
     destination,
+    tripId,
+    ...(area ? { area } : {}),
   });
+  if (!pending)
+    areas.set(
+      key,
+      request.then(
+        (result) => result.area ?? null,
+        () => {
+          // A failed first search must not block the next one from trying.
+          areas.delete(key);
+          return null;
+        },
+      ),
+    );
+  return request;
+}
 export const getPlace = (placeId: string, access: TripAccess) =>
   invoke<PlaceDetails>("places", { action: "details", placeId, ...access });
 export const getPhoto = (placeId: string, access: TripAccess) =>
