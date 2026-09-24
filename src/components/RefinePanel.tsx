@@ -94,6 +94,7 @@ export function RefinePanel({
           aria-label="מה לשנות במסלול"
           placeholder="מה לשנות? למשל: תרגיע את יום 2, או תוסיף מוזיאון לילדים"
           maxLength={500}
+          enterKeyHint="send"
           value={text}
           disabled={disabled || busy}
           onChange={(e) => setText(e.target.value)}

@@ -227,6 +227,7 @@ export function TripForm({
             <input
               name="budget"
               type="number"
+              inputMode="decimal"
               min="0"
               max="10000000"
               step="1"

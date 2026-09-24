@@ -98,7 +98,7 @@ export default function Auth() {
       <section className="auth-form-side">
         <Link to="/" className="brand" dir="ltr">
           <Compass className="text-primary" />
-          planatrip.
+          masluli.
         </Link>
         <div className="auth-form-content">
           <span className="eyebrow">ההרפתקה ממשיכה כאן</span>
@@ -135,6 +135,9 @@ export default function Auth() {
               <span>כתובת אימייל</span>
               <input
                 type="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 dir="ltr"
                 required
                 autoComplete="email"

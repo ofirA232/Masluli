@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
 import { TripForm, requestKey } from "@/components/TripForm";
+import { usePlanCover } from "@/components/PlanLoading";
 import { SplitWords } from "@/components/SplitWords";
 import { useAuthState } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,13 +13,17 @@ import type { Json } from "@/integrations/supabase/types";
 export default function NewTrip() {
   const [busy, setBusy] = useState(false),
     { user } = useAuthState(),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    setCover = usePlanCover();
   const create = async (request: ItineraryRequest, ai: boolean) => {
     if (!user) {
       navigate("/auth?next=%2Ftrip%2Fnew");
       return;
     }
     setBusy(true);
+    // With the AI, the loading cover goes up on the click and stays until the
+    // workspace has the plan; the pages in between never show.
+    if (ai) setCover("composing");
     try {
       const plan = createPlan(request);
       const { data, error } = await supabase
@@ -36,6 +41,9 @@ export default function NewTrip() {
         );
       sessionStorage.removeItem(requestKey);
       navigate(`/trip/${data.id}`, { state: { generate: ai }, replace: true });
+    } catch (e) {
+      setCover(null);
+      throw e;
     } finally {
       setBusy(false);
     }

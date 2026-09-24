@@ -1,6 +1,5 @@
-import { lazy, Suspense } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Toaster } from "@/components/ui/toaster";
+import { lazy, Suspense, useEffect, useRef } from "react";
+import { MotionConfig } from "motion/react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -13,6 +12,7 @@ import {
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSmoothScroll } from "@/hooks/useSmoothScroll";
+import { PlanCoverProvider } from "@/components/PlanLoading";
 import Index from "./pages/Index";
 const Auth = lazy(() => import("./pages/Auth"));
 const Trip = lazy(() => import("./pages/Trip"));
@@ -27,41 +27,47 @@ const queryClient = new QueryClient({
 });
 function AnimatedRoutes() {
   const location = useLocation();
-  const reduce = useReducedMotion();
   useSmoothScroll(location.pathname);
-  const fade = reduce ? { opacity: 1 } : { opacity: 0 };
+  // The first page paints as-is; only later navigations fade in, except into
+  // a trip being generated, which arrives under the loading cover. Decided
+  // once per page: the workspace clears that navigation state right away,
+  // and re-deciding then would replay the fade.
+  const firstPage = useRef(true);
+  useEffect(() => {
+    firstPage.current = false;
+  }, []);
+  const shell = useRef({ path: "", fade: false });
+  if (shell.current.path !== location.pathname)
+    shell.current = {
+      path: location.pathname,
+      fade: !firstPage.current && !location.state?.generate,
+    };
   return (
-    // mode="wait" lets the old page leave before the next one arrives, so the
-    // two are never on screen together.
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={location.pathname}
-        className="route-shell"
-        initial={fade}
-        animate={{ opacity: 1 }}
-        exit={fade}
-        transition={{ duration: reduce ? 0 : 0.22, ease: [0.2, 0, 0, 1] }}
+    // Keyed on the path so each page mounts fresh and fades in (CSS). There is
+    // no exit phase: the next page never waits for the old one to leave.
+    <div
+      key={location.pathname}
+      className={shell.current.fade ? "route-shell is-entering" : "route-shell"}
+    >
+      <Suspense
+        fallback={
+          <div className="empty-state" role="status">
+            רק רגע, יוצאים לדרך…
+          </div>
+        }
       >
-        <Suspense
-          fallback={
-            <div className="empty-state" role="status">
-              רק רגע, יוצאים לדרך…
-            </div>
-          }
-        >
-          <Routes location={location}>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/trip/new" element={<NewTrip />} />
-            <Route path="/trip/:id" element={<Trip />} />
-            <Route path="/my-trips" element={<MyTrips />} />
-            <Route path="/privacy" element={<Legal />} />
-            <Route path="/terms" element={<Legal />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </motion.div>
-    </AnimatePresence>
+        <Routes location={location}>
+          <Route path="/" element={<Index />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/trip/new" element={<NewTrip />} />
+          <Route path="/trip/:id" element={<Trip />} />
+          <Route path="/my-trips" element={<MyTrips />} />
+          <Route path="/privacy" element={<Legal />} />
+          <Route path="/terms" element={<Legal />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </div>
   );
 }
 export default function App() {
@@ -70,11 +76,15 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <Toaster />
           <Sonner />
-          <BrowserRouter>
-            <AnimatedRoutes />
-          </BrowserRouter>
+          {/* Under reduced motion, Motion keeps fades and drops movement. */}
+          <MotionConfig reducedMotion="user">
+            <PlanCoverProvider>
+              <BrowserRouter>
+                <AnimatedRoutes />
+              </BrowserRouter>
+            </PlanCoverProvider>
+          </MotionConfig>
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

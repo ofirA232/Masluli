@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { beat, cssEase, easeInOut } from "@/lib/motion";
 import {
   GripVertical,
   MapPin,
@@ -94,8 +95,9 @@ export function ActivityCard({
   meta,
 }: Props) {
   const kind = stopKind(a);
-  // Motion owns the post-drop settle (the wrapper animates its layout), so
-  // dnd-kit must not animate the same move as well.
+  // dnd-kit shifts the neighbours while dragging (zoox.com's in-out curve at
+  // its 0.334s beat); TripWorkspace glides the dropped card into its slot and
+  // pauses the Motion wrapper for the drag, so nothing else animates the move.
   const {
     attributes,
     listeners,
@@ -106,6 +108,7 @@ export function ActivityCard({
   } = useSortable({
     id: a.id,
     disabled: readOnly,
+    transition: { duration: beat[0] * 1000, easing: cssEase(easeInOut) },
     animateLayoutChanges: () => false,
   });
   const visibility = useRef<HTMLDivElement>(null);
@@ -168,7 +171,7 @@ export function ActivityCard({
       ref={setNodeRef}
       id={`activity-${a.id}`}
       className={`activity-card is-${kind} ${entering ? "is-entering" : ""} ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
     >
       <div ref={visibility} className="activity-content">
         <div className="activity-topline">

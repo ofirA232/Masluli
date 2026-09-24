@@ -63,7 +63,7 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
   return (
     <section className="print-trip" aria-label="מסלול מלא להדפסה">
       <header>
-        <strong>Planatrip</strong>
+        <strong>Masluli</strong>
         <h1>{plan.metadata.title}</h1>
         <p>
           {plan.metadata.destination} · {plan.days.length} ימים ·{" "}

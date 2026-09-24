@@ -141,7 +141,7 @@ export function useTripDocument(record: TripRecord, readOnly: boolean) {
     );
     const a = document.createElement("a");
     a.href = url;
-    a.download = "planatrip-draft.json";
+    a.download = "masluli-draft.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };

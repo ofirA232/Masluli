@@ -104,6 +104,7 @@ export default function MyTrips() {
               <input
                 aria-label="חיפוש בטיולים"
                 placeholder="חיפוש לפי שם הטיול או היעד…"
+                enterKeyHint="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />

@@ -34,6 +34,12 @@ export function SiteHeader({
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const { exists, loaded } = useTravelerProfile();
+  // The phone's status bar takes the colour of the header beneath it.
+  useEffect(() => {
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", tone === "mint" ? "#d3e4df" : "#ffffff");
+  }, [tone]);
   // Tuck the header away while scrolling down and bring it back on the way up.
   const [tucked, setTucked] = useState(false);
   useEffect(() => {
@@ -77,12 +83,12 @@ export function SiteHeader({
       data-tucked={tucked && !open}
     >
       <div className="header-inner">
-        <Link to="/" className="brand" aria-label="Planatrip — דף הבית">
+        <Link to="/" className="brand" aria-label="Masluli — דף הבית">
           <span className="brand-symbol">
             <Compass size={25} />
           </span>
           <span dir="ltr">
-            planatrip<span className="brand-dot">.</span>
+            masluli<span className="brand-dot">.</span>
           </span>
         </Link>
         <nav
@@ -193,11 +199,11 @@ export function SiteFooter() {
         <div className="footer-legal">
           <Link to="/privacy">פרטיות</Link>
           <Link to="/terms">תנאי שימוש</Link>
-          <span>© {new Date().getFullYear()} Planatrip</span>
+          <span>© {new Date().getFullYear()} Masluli</span>
         </div>
       </div>
-      <Link to="/" className="footer-wordmark" dir="ltr" aria-label="Planatrip — דף הבית">
-        planatrip.
+      <Link to="/" className="footer-wordmark" dir="ltr" aria-label="Masluli — דף הבית">
+        masluli.
       </Link>
     </footer>
   );

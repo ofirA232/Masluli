@@ -1,16 +1,31 @@
-import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, MapPin } from "lucide-react";
+import { useEffect, useLayoutEffect, useState } from "react";
+import {
+  Link,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import { MapPin } from "lucide-react";
 import { useAuthState } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TripWorkspace } from "@/components/TripWorkspace";
 import { Button } from "@/components/ui/button";
+import { RippleLoader } from "@/components/ui/ripple-loader";
+import { usePlanCover } from "@/components/PlanLoading";
 import type { TripRecord } from "@/types/itinerary";
 export default function Trip() {
   const { id } = useParams(),
     [params] = useSearchParams(),
-    { user, loading: authLoading } = useAuthState();
+    location = useLocation(),
+    { user, loading: authLoading } = useAuthState(),
+    setCover = usePlanCover();
+  const generate = !!location.state?.generate;
+  // Arriving to generate (also after a reload mid-creation): the cover stays
+  // up while the trip loads; the workspace takes it over from there.
+  useLayoutEffect(() => {
+    if (generate) setCover("composing");
+  }, [generate, setCover]);
   const shareToken = params.get("share_token") || undefined;
   const [record, setRecord] = useState<TripRecord | null>(null),
     [loading, setLoading] = useState(true),
@@ -53,13 +68,22 @@ export default function Trip() {
       active = false;
     };
   }, [id, shareToken, user, authLoading]);
+  // A trip that cannot be opened takes the cover down with it.
+  useEffect(() => {
+    if (!loading && !record) setCover(null);
+  }, [loading, record, setCover]);
   if (loading)
     return (
       <>
         <SiteHeader compact />
         <main className="empty-state">
-          <Loader2 className="animate-spin" />
-          <p>פותחים את המסלול שלכם…</p>
+          {/* When generating, the shared cover is already over this. */}
+          {!generate && (
+            <>
+              <RippleLoader />
+              <p>פותחים את המסלול שלכם…</p>
+            </>
+          )}
         </main>
       </>
     );

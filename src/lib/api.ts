@@ -37,6 +37,7 @@ export async function searchPlaces(
   query: string,
   destination: string,
   tripId?: string,
+  language: "he" | "en" = "he",
 ): Promise<SearchResult> {
   const key = destination.trim().toLowerCase();
   const pending = areas.get(key);
@@ -46,6 +47,7 @@ export async function searchPlaces(
     query,
     destination,
     tripId,
+    language,
     ...(area ? { area } : {}),
   });
   if (!pending)

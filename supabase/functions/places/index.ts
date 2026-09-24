@@ -199,6 +199,10 @@ Deno.serve((req) =>
         ? body.destination.slice(0, 100)
         : "";
     const tripId = typeof body.tripId === "string" ? body.tripId : undefined;
+    // "en" is used for the AI's English place names: results then come back in
+    // English too, so the name match compares like with like. Travellers
+    // typing in the search box stay in Hebrew.
+    const english = body.language === "en";
     const area =
       givenArea(body.area) ?? (await destinationArea(destination, tripId));
     const data = await googleFetch(
@@ -210,8 +214,10 @@ Deno.serve((req) =>
             "places.id,places.displayName,places.formattedAddress,places.location,places.attributions",
         },
         body: JSON.stringify({
-          textQuery: `${query} ${destination}`,
-          languageCode: "he",
+          // With an area the bias already places the search, and a Hebrew
+          // destination appended to an English name only muddies the query.
+          textQuery: english && area ? query : `${query} ${destination}`,
+          languageCode: english ? "en" : "he",
           pageSize: 8,
           ...(area
             ? {
