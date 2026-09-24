@@ -16,6 +16,7 @@ Deno.serve((req) =>
         const result = await callAi(
           `Return {days:[{day_number,activities:[]}]} with exactly ${count} days numbered ${start} through ${start + count - 1}. Each day has 4-6 activities. Respect the total trip dates and travelers.`,
           { ...input, traveler_profile },
+          typeof body.tripId === "string" ? body.tripId : undefined,
         );
         if (!Array.isArray(result.days) || result.days.length !== count)
           throw new ApiError(502, "התקבל מסלול חלקי. אפשר לנסות שוב.");

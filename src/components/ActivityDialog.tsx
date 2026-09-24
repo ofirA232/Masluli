@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "./ui/dialog";
+import { useClosingDialog } from "@/hooks/useClosingDialog";
 import { Button } from "./ui/button";
 import {
   categories,
@@ -46,6 +47,7 @@ export function ActivityDialog({
   onSave: (a: Activity) => void;
   onClose: () => void;
 }) {
+  const dialog = useClosingDialog(onClose);
   const [a, setA] = useState<Activity>(
     activity || normalizeActivity({ id: uid(), name: "", source: "manual" }),
   );
@@ -238,7 +240,7 @@ export function ActivityDialog({
         "manual",
       ),
     );
-    onClose();
+    dialog.close();
   };
   const kinds: { id: StopKind; label: string; icon: React.ReactNode }[] = [
     { id: "place", label: "מקום", icon: <MapPin size={15} /> },
@@ -246,13 +248,8 @@ export function ActivityDialog({
     { id: "lodging", label: "לינה", icon: <Bed size={15} /> },
   ];
   return (
-    <Dialog
-      open
-      onOpenChange={(v) => {
-        if (!v) onClose();
-      }}
-    >
-      <DialogContent className="activity-dialog">
+    <Dialog {...dialog.rootProps}>
+      <DialogContent className="activity-dialog" {...dialog.contentProps}>
         <DialogTitle>
           {activity ? "הפרטים שעושים את ההבדל" : "עוד תחנה בדרך שלכם"}
         </DialogTitle>
@@ -540,6 +537,7 @@ export function ActivityDialog({
                 <input
                   aria-label="עלות מינימלית"
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step=".01"
                   value={min}
@@ -551,6 +549,7 @@ export function ActivityDialog({
                 <input
                   aria-label="עלות מקסימלית"
                   type="number"
+                  inputMode="decimal"
                   min={min || "0"}
                   step=".01"
                   value={max}
@@ -601,6 +600,7 @@ export function ActivityDialog({
                   <input
                     aria-label="כמות"
                     type="number"
+                    inputMode="decimal"
                     min="1"
                     max="1000"
                     value={quantity}

@@ -13,4 +13,4 @@ See the [Unsplash License](https://unsplash.com/license). These decorative asset
 
 Dynamic destination covers from `unsplash-image` use the API's original image URL, photographer profile and photo page with referral parameters, and download tracking. Keep those URLs and attribution intact. Google place photos are fetched separately, on demand, with the returned author and source links; they are not stored as local assets or in trip records.
 
-The Planatrip wordmark, compass SVG, social preview SVG and decorative CSS were created for this project. No Wanderlog logo, illustration or screenshot is embedded in the application.
+The Masluli wordmark, compass SVG, social preview SVG and decorative CSS were created for this project. No Wanderlog logo, illustration or screenshot is embedded in the application.

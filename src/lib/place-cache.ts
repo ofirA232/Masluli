@@ -4,9 +4,11 @@ import type {
   PlaceDetails,
   PlacePhoto,
 } from "@/types/itinerary";
-// Google Maps Platform terms allow caching place content for up to 30 days
-// (place IDs indefinitely). Cached content lives inside the trip document so
-// repeat visits and shared links need no provider calls until it expires.
+// Place content may be cached temporarily, for up to 30 days, to spare repeat
+// calls, as long as it stays within the trip it was fetched for and is shown
+// nowhere else (place IDs may be kept indefinitely). It lives inside the trip
+// document: opening the trip refreshes it, and a daily database job
+// (purge_expired_place_cache) deletes it from trips nobody opened in time.
 export const PLACE_CACHE_DAYS = 30;
 const MAX_AGE = PLACE_CACHE_DAYS * 86400000;
 const obj = (v: unknown): Record<string, unknown> =>

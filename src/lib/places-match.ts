@@ -49,3 +49,58 @@ export function pickPlace<T extends { name?: string }>(
   if (named.length === 1 || lenient) return named[0];
   return null;
 }
+
+/** Metres between two coordinates (equirectangular, plenty for this check). */
+export function distance(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const rad = Math.PI / 180;
+  const x = (b.lng - a.lng) * rad * Math.cos(((a.lat + b.lat) / 2) * rad);
+  const y = (b.lat - a.lat) * rad;
+  return Math.sqrt(x * x + y * y) * 6_371_000;
+}
+/**
+ * Is this place plausibly inside the destination? The allowance is generous —
+ * the area radius plus a margin — because the point is to reject a match in
+ * another country, not to police suburbs.
+ */
+export function insideArea(
+  place: { coordinates?: { lat: number; lng: number } },
+  area?: { lat: number; lng: number; radius: number } | null,
+): boolean {
+  if (!area || !place.coordinates) return true;
+  return distance(place.coordinates, area) <= area.radius * 1.5 + 50_000;
+}
+/**
+ * Ids of stops that sit far away from the rest of the trip. Uses medians so a
+ * single bad link cannot drag the centre towards itself. Deliberately blunt:
+ * it should catch a stop that landed in another country, not a day trip.
+ */
+export function outlierStops(
+  stops: { id: string; coordinates?: { lat: number; lng: number } }[],
+): Set<string> {
+  const flagged = new Set<string>();
+  const placed = stops.filter((s) => s.coordinates);
+  // With one or two stops there is no "rest of the trip" to compare against.
+  if (placed.length < 3) return flagged;
+  const median = (values: number[]) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = sorted.length >> 1;
+    return sorted.length % 2
+      ? sorted[middle]
+      : (sorted[middle - 1] + sorted[middle]) / 2;
+  };
+  const centre = {
+    lat: median(placed.map((s) => s.coordinates!.lat)),
+    lng: median(placed.map((s) => s.coordinates!.lng)),
+  };
+  const spread = placed.map((s) => ({
+    id: s.id,
+    away: distance(s.coordinates!, centre),
+  }));
+  const typical = median(spread.map((s) => s.away));
+  for (const { id, away } of spread)
+    if (away > 300_000 && away > Math.max(typical, 1_000) * 4) flagged.add(id);
+  return flagged;
+}

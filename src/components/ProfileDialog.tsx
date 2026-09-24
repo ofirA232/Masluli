@@ -7,6 +7,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "./ui/dialog";
+import { useClosingDialog } from "@/hooks/useClosingDialog";
 import { Button } from "./ui/button";
 import { useTravelerProfile } from "@/hooks/useTravelerProfile";
 import {
@@ -48,6 +49,7 @@ function Choices<T extends string>({
   );
 }
 export function ProfileDialog({ onClose }: { onClose: () => void }) {
+  const dialog = useClosingDialog(onClose);
   const { preferences, loaded, save } = useTravelerProfile();
   const [form, setForm] = useState<TravelPreferences>(preferences);
   const [busy, setBusy] = useState(false),
@@ -66,7 +68,7 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
     try {
       await save(form);
       toast.success("ההעדפות נשמרו. ההצעות הבאות כבר יתאימו לכם.");
-      onClose();
+      dialog.close();
     } catch (err) {
       setError(err instanceof Error ? err.message : "השמירה נכשלה");
     } finally {
@@ -74,13 +76,11 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
     }
   };
   return (
-    <Dialog
-      open
-      onOpenChange={(v) => {
-        if (!v) onClose();
-      }}
-    >
-      <DialogContent className="activity-dialog profile-dialog">
+    <Dialog {...dialog.rootProps}>
+      <DialogContent
+        className="activity-dialog profile-dialog"
+        {...dialog.contentProps}
+      >
         <DialogTitle>איך אתם אוהבים לטייל?</DialogTitle>
         <DialogDescription>
           כמה בחירות קצרות. הפרטים פרטיים ומשפיעים על כל הצעה של ה־AI.

@@ -223,6 +223,7 @@ export function BudgetPanel({
                 aria-label="סכום הוצאה"
                 required
                 type="number"
+                inputMode="decimal"
                 min="0"
                 max="10000000"
                 step=".01"
@@ -250,6 +251,7 @@ export function BudgetPanel({
                 <input
                   aria-label="שער לשקל"
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="any"
                   value={rate}
@@ -354,6 +356,7 @@ export function BudgetPanel({
                         <span>{t.name}</span>
                         <input
                           type="number"
+                          inputMode="decimal"
                           min="0"
                           step=".01"
                           aria-label={`חלק של ${t.name}`}

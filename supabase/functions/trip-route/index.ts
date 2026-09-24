@@ -2,6 +2,7 @@ import {
   handler,
   textInput,
   quota,
+  recordUsage,
   googleKey,
   googleFetch,
   authorizePlaces,
@@ -19,6 +20,11 @@ Deno.serve((req) =>
     const ids = body.placeIds.map((id) => textInput(id, 300));
     const identity = await authorizePlaces(req, body, ids);
     await quota(identity, "routes", 20);
+    recordUsage({
+      service: "routes",
+      sku: "routes",
+      tripId: typeof body.tripId === "string" ? body.tripId : undefined,
+    });
     const result = await googleFetch(
       "https://routes.googleapis.com/directions/v2:computeRoutes",
       {

@@ -12,10 +12,11 @@ Deno.serve((req) =>
     const { input, known } = refineInput(body);
     await quota(id, "ai-refine", 20, 3600);
     const traveler_profile = await preferences(req);
-    const result = await callAi(refineInstruction, {
-      ...input,
-      traveler_profile,
-    });
+    const result = await callAi(
+      refineInstruction,
+      { ...input, traveler_profile },
+      typeof body.tripId === "string" ? body.tripId : undefined,
+    );
     return refineOutput(result, known);
   }),
 );

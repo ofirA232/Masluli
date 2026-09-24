@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -52,13 +53,15 @@ import { toast } from "sonner";
 import { SiteHeader } from "./SiteHeader";
 import { Button } from "./ui/button";
 import { ActivityCard } from "./ActivityCard";
+import { AnimatePresence, motion } from "motion/react";
+import { ActivePill } from "./ActivePill";
 import { ActivityDialog } from "./ActivityDialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "./ui/dialog";
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+} from "./ui/drawer";
 import { BudgetPanel } from "./BudgetPanel";
 import { TripSettings } from "./TripSettings";
 import { PrintTrip } from "./PrintTrip";
@@ -76,16 +79,19 @@ import {
   uid,
 } from "@/lib/trips";
 import { getPlace, getRoute, invoke, searchPlaces } from "@/lib/api";
-import { pickPlace } from "@/lib/places-match";
+import { insideArea, outlierStops, pickPlace } from "@/lib/places-match";
 import { LodgingGhost } from "./StopBodies";
 import { RefinePanel, type ChatMessage } from "./RefinePanel";
 import { compactPlan, mergeRefinement } from "@/lib/refine";
 import { placeCacheFresh, withPlaceCache } from "@/lib/place-cache";
 import { destinationImage } from "@/lib/destinations";
+import { usePlanCover } from "@/components/PlanLoading";
+import { beat, cssEase, easeInOut, power2In } from "@/lib/motion";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Activity,
   Day,
+  PlaceArea,
   PlaceDetails,
   PlacePhoto,
   RefineResponse,
@@ -134,7 +140,17 @@ export function TripWorkspace({
       day: number | "saved";
     } | null>(null),
     [settings, setSettings] = useState(false),
-    [generating, setGenerating] = useState(false),
+    // Straight from creation the AI starts on mount, so the very first
+    // render is already "generating" and the plan is never shown uncovered.
+    [generating, setGenerating] = useState(
+      () =>
+        !readOnly &&
+        !!location.state?.generate &&
+        !!plan.metadata.startDate &&
+        !!plan.metadata.endDate,
+    ),
+    [awaitingPlaces, setAwaitingPlaces] = useState(false),
+    [placesTick, setPlacesTick] = useState(0),
     [aiError, setAiError] = useState(""),
     [swapping, setSwapping] = useState<string | null>(null),
     [chat, setChat] = useState<ChatMessage[]>([]),
@@ -142,6 +158,8 @@ export function TripWorkspace({
     [sharing, setSharing] = useState(false),
     [mode, setMode] = useState<"WALK" | "DRIVE">("WALK"),
     [details, setDetails] = useState<Record<string, PlaceDetails>>({});
+  // True from the first time the map panel is visible, and never false again.
+  const [mapMounted, setMapMounted] = useState(false);
   const [smallScreen, setSmallScreen] = useState(
     () => window.matchMedia("(max-width: 767px)").matches,
   );
@@ -151,6 +169,9 @@ export function TripWorkspace({
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
+  useEffect(() => {
+    if (!smallScreen || mobileMap) setMapMounted(true);
+  }, [smallScreen, mobileMap]);
   const access = useMemo(
     () => ({ tripId: record.id, shareToken }),
     [record.id, shareToken],
@@ -159,6 +180,8 @@ export function TripWorkspace({
   currentPlan.current = plan;
   const started = useRef(false),
     resolved = useRef(new Set<string>()),
+    pendingPlaces = useRef(0),
+    announceReady = useRef(false),
     alive = useRef(true);
   const coverStarted = useRef(false);
   useEffect(() => {
@@ -313,6 +336,21 @@ export function TripWorkspace({
       )
       .filter((a) => a.coordinates);
   }, [mapLists, details]);
+  // A stop whose coordinates sit far from the rest of the trip is usually a
+  // wrong link from before the search was biased to the destination, so the
+  // card offers to fix it.
+  const outliers = useMemo(
+    () =>
+      outlierStops(
+        allActivities(plan).map((a) => ({
+          id: a.id,
+          coordinates:
+            details[a.place_id || ""]?.coordinates ||
+            (a.source === "manual" ? a.coordinates : undefined),
+        })),
+      ),
+    [plan, details],
+  );
   // Transport legs are never routed; legs are drawn only between places.
   const routable = (
     day !== "all" && tab === "itinerary"
@@ -364,9 +402,14 @@ export function TripWorkspace({
         }
       : null;
   }, [preview, plan.days, plan.saved_places]);
+  // The sheet keeps showing the last stop after preview clears, so vaul can
+  // slide it away instead of the content vanishing mid-gesture.
+  const [sheet, setSheet] = useState(previewed);
+  if (previewed && previewed !== sheet) setSheet(previewed);
   const generate = async () => {
     const original = currentPlan.current;
     if (!original.metadata.startDate || !original.metadata.endDate) {
+      setGenerating(false);
       setSettings(true);
       toast("בחרו תאריכים לפני יצירת מסלול");
       return;
@@ -374,12 +417,15 @@ export function TripWorkspace({
     if (
       original.days.some((d) => d.activities.length) &&
       !window.confirm("יצירת מסלול חדש תחליף את התחנות המשובצות. להמשיך?")
-    )
+    ) {
+      setGenerating(false);
       return;
+    }
     setGenerating(true);
     setAiError("");
     try {
       const result = await invoke<{ days: Day[] }>("generate-itinerary", {
+        tripId: record.id,
         destination: original.metadata.destination,
         startDate: original.metadata.startDate,
         endDate: original.metadata.endDate,
@@ -409,7 +455,8 @@ export function TripWorkspace({
       }));
       setDay(1);
       setTab("itinerary");
-      toast.success("המסלול מוכן. עכשיו אפשר להפוך אותו לשלכם.");
+      setAwaitingPlaces(true);
+      announceReady.current = true;
     } catch (e) {
       if (alive.current)
         setAiError(e instanceof Error ? e.message : "יצירת המסלול נכשלה");
@@ -442,19 +489,39 @@ export function TripWorkspace({
     const destination = plan.metadata.destination;
     for (const a of candidates) {
       resolved.current.add(a.id);
+      pendingPlaces.current++;
       (async () => {
-        let match = pickPlace(
-          a.name,
-          (await searchPlaces(a.name, destination)).places,
-        );
-        // The AI's English search term is usually more specific than the
-        // Hebrew title, so let Google's ranking decide on that query.
-        if (!match && a.image_search_term.trim())
-          match = pickPlace(
-            a.image_search_term,
-            (await searchPlaces(a.image_search_term, destination)).places,
-            true,
+        // The AI's English name is how Google indexes most places, so it is
+        // searched first and usually links the stop in one paid search. The
+        // Hebrew title is the fallback, not the first attempt: searching it
+        // first cost about two searches per linked stop.
+        const english = a.image_search_term.trim();
+        let area: PlaceArea | null | undefined;
+        let match: PlaceDetails | null = null;
+        if (english) {
+          const first = await searchPlaces(
+            english,
+            destination,
+            access.tripId,
+            "en",
           );
+          area = first.area;
+          match = pickPlace(english, first.places, true);
+          if (match && !insideArea(match, area)) match = null;
+        }
+        if (!match) {
+          const fallback = await searchPlaces(
+            a.name,
+            destination,
+            access.tripId,
+          );
+          area = fallback.area ?? area;
+          match = pickPlace(a.name, fallback.places);
+        }
+        // A result outside the destination is worse than no link at all: the
+        // card stays marked unverified instead of dropping a pin in the wrong
+        // country and dragging the whole map with it.
+        if (match && !insideArea(match, area)) match = null;
         if (!alive.current || !match) return;
         edit((prev) => {
           const latest = allActivities(prev).find((v) => v.id === a.id);
@@ -466,11 +533,61 @@ export function TripWorkspace({
               })
             : prev;
         });
-      })().catch(() => {
-        /* unresolved suggestions remain explicitly labelled */
-      });
+      })()
+        .catch(() => {
+          /* unresolved suggestions remain explicitly labelled */
+        })
+        .finally(() => {
+          pendingPlaces.current--;
+          setPlacesTick((t) => t + 1);
+        });
     }
-  }, [plan.days, plan.metadata.destination, day, readOnly, generating, edit]);
+  }, [
+    plan.days,
+    plan.metadata.destination,
+    day,
+    readOnly,
+    generating,
+    edit,
+    access.tripId,
+  ]);
+  // A freshly generated plan stays covered until the first day's stops have
+  // been looked up (linked or not), so the traveller sees it with its places.
+  // Runs after the linking effect, which counts its lookups synchronously.
+  useEffect(() => {
+    if (awaitingPlaces && !generating && pendingPlaces.current === 0)
+      setAwaitingPlaces(false);
+  }, [awaitingPlaces, generating, placesTick]);
+  // While the plan is covered, what lies under the cover is out of reach for
+  // the keyboard too; the site header stays usable.
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const covered = generating || awaitingPlaces;
+  useEffect(() => {
+    const parts = workspaceRef.current?.querySelectorAll(
+      ":scope > .trip-toolbar, :scope > .workspace-body",
+    );
+    parts?.forEach((el) => el.toggleAttribute("inert", covered));
+  }, [covered]);
+  // "Ready" is said when the cover lifts, not while it still says it is
+  // placing stops on the map.
+  useEffect(() => {
+    if (covered || !announceReady.current) return;
+    announceReady.current = false;
+    toast.success("המסלול מוכן. עכשיו אפשר להפוך אותו לשלכם.");
+  }, [covered]);
+  // The cover itself lives above the routes (PlanCoverProvider); set before
+  // paint so it never drops for a frame between the trip loader and here.
+  const setCover = usePlanCover();
+  useLayoutEffect(() => {
+    setCover(generating ? "composing" : awaitingPlaces ? "placing" : null);
+  }, [setCover, generating, awaitingPlaces]);
+  useEffect(() => () => setCover(null), [setCover]);
+  // A slow places provider must not hold the plan hostage.
+  useEffect(() => {
+    if (!awaitingPlaces) return;
+    const cap = setTimeout(() => setAwaitingPlaces(false), 12000);
+    return () => clearTimeout(cap);
+  }, [awaitingPlaces]);
   // Chat refinement: the model returns only changed days; kept stops keep
   // their verified place data, new ones go through the usual auto-link.
   const undoSnapshot = useRef<TripPlan | null>(null);
@@ -479,10 +596,10 @@ export function TripWorkspace({
     setChat((c) => [...c, { id: uid(), role: "user", text: message }]);
     setRefining(true);
     try {
-      const result = await invoke<RefineResponse>(
-        "refine-itinerary",
-        compactPlan(before, day === "all" ? null : day, message),
-      );
+      const result = await invoke<RefineResponse>("refine-itinerary", {
+        ...compactPlan(before, day === "all" ? null : day, message),
+        tripId: record.id,
+      });
       if (!alive.current) return;
       const { plan: next, summary } = mergeRefinement(
         currentPlan.current,
@@ -535,6 +652,7 @@ export function TripWorkspace({
     setSwapping(a.id);
     try {
       const result = await invoke<Activity>("swap-activity", {
+        tripId: record.id,
         destination: plan.metadata.destination,
         interests: plan.metadata.interests,
         day_number: dayNumber === "saved" ? 1 : dayNumber,
@@ -591,7 +709,40 @@ export function TripWorkspace({
       setSharing(false);
     }
   };
+  // Motion's layout animation is paused for the length of a drag and resumes
+  // once the drop has rendered, so it never replays the move dnd-kit made.
+  const [dragging, setDragging] = useState(false);
+  const settleDrag = () => setTimeout(() => setDragging(false), 0);
+  // Without a drag overlay dnd-kit drops the card straight into its new slot.
+  // Instead, remember where the card was let go and, once the list has
+  // re-rendered but before it paints, glide it from there into place (FLIP).
+  const dropFrom = useRef<{ id: string; x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const from = dropFrom.current;
+    if (!from) return;
+    dropFrom.current = null;
+    const el = window.document.getElementById(`activity-${from.id}`);
+    if (!el || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const to = el.getBoundingClientRect();
+    const dx = from.x - to.left,
+      dy = from.y - to.top;
+    if (Math.abs(dx) + Math.abs(dy) < 1) return;
+    el.animate(
+      [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+      { duration: beat[0] * 1000, easing: cssEase(easeInOut) },
+    );
+  });
   const dragEnd = ({ active, over }: DragEndEvent) => {
+    settleDrag();
+    const dropped = window.document
+      .getElementById(`activity-${active.id}`)
+      ?.getBoundingClientRect();
+    if (dropped)
+      dropFrom.current = {
+        id: String(active.id),
+        x: dropped.left,
+        y: dropped.top,
+      };
     if (!over || active.id === over.id || locked) return;
     const target = String(over.id);
     if (target.startsWith("day-")) {
@@ -645,70 +796,92 @@ export function TripWorkspace({
         items={activities.map((a) => a.id)}
         strategy={verticalListSortingStrategy}
       >
-        {activities.map((a, i) => (
-          <div key={a.id}>
-            <ActivityCard
-              activity={a}
-              index={i}
-              color={color}
-              day={target}
-              meta={plan.metadata}
-              date={
-                target === "saved"
-                  ? null
-                  : dayDate(plan.metadata.startDate, target - 1)
-              }
-              dayCount={plan.days.length}
-              access={access}
-              readOnly={locked}
-              selected={selected === a.id}
-              onSelect={() => select(a.id)}
-              onEdit={() => setDialog({ activity: a, day: target })}
-              onMove={(d, index) =>
-                edit((p) => moveActivity(p, a.id, d, index))
-              }
-              onDelete={() => {
-                if (window.confirm("להסיר את התחנה מהטיול?"))
-                  edit((p) => ({
-                    ...p,
-                    days: p.days.map((d) => ({
-                      ...d,
-                      activities: d.activities.filter((v) => v.id !== a.id),
-                    })),
-                    saved_places: p.saved_places.filter((v) => v.id !== a.id),
-                  }));
+        {/* Cards slide to new positions (zoox.com moves on its in-out curve,
+            0.334s) and leave with a quick fade; popLayout lets the rest close
+            the gap straight away. Position only, so a card that grows is not
+            stretched. During a drag dnd-kit moves the cards, so layout is off
+            until the drop has settled. Entrances are CSS (is-entering). */}
+        <AnimatePresence initial={false} mode="popLayout">
+          {activities.map((a, i) => (
+            <motion.div
+              key={a.id}
+              layout={dragging ? false : "position"}
+              exit={{
+                opacity: 0,
+                scale: 0.97,
+                transition: { duration: 0.25, ease: power2In },
               }}
-              onSwap={() => void swap(a, target)}
-              swapping={swapping === a.id}
-              onDetails={onDetails}
-              onCache={cachePlace}
-            />
-            {canRoute &&
-              legAfter.has(a.id) &&
-              route.data?.legs[legAfter.get(a.id)!] && (
-                <div className="route-leg">
-                  {mode === "WALK" ? (
-                    <Footprints size={13} />
-                  ) : (
-                    <Car size={13} />
-                  )}
-                  כ־
-                  {Math.ceil(
-                    route.data.legs[legAfter.get(a.id)!].duration / 60,
-                  )}{" "}
-                  דקות ·{" "}
-                  {(
-                    route.data.legs[legAfter.get(a.id)!].distance / 1000
-                  ).toFixed(1)}{" "}
-                  ק״מ
-                </div>
-              )}
-          </div>
-        ))}
+              transition={{ duration: beat[0], ease: easeInOut }}
+            >
+              <ActivityCard
+                activity={a}
+                index={i}
+                color={color}
+                day={target}
+                meta={plan.metadata}
+                date={
+                  target === "saved"
+                    ? null
+                    : dayDate(plan.metadata.startDate, target - 1)
+                }
+                dayCount={plan.days.length}
+                access={access}
+                readOnly={locked}
+                selected={selected === a.id}
+                onSelect={() => select(a.id)}
+                onEdit={() => setDialog({ activity: a, day: target })}
+                onMove={(d, index) =>
+                  edit((p) => moveActivity(p, a.id, d, index))
+                }
+                onDelete={() => {
+                  if (window.confirm("להסיר את התחנה מהטיול?"))
+                    edit((p) => ({
+                      ...p,
+                      days: p.days.map((d) => ({
+                        ...d,
+                        activities: d.activities.filter((v) => v.id !== a.id),
+                      })),
+                      saved_places: p.saved_places.filter((v) => v.id !== a.id),
+                    }));
+                }}
+                onSwap={() => void swap(a, target)}
+                swapping={swapping === a.id}
+                farFromTrip={outliers.has(a.id)}
+                onDetails={onDetails}
+                onCache={cachePlace}
+              />
+              {canRoute &&
+                legAfter.has(a.id) &&
+                route.data?.legs[legAfter.get(a.id)!] && (
+                  <div className="route-leg">
+                    {mode === "WALK" ? (
+                      <Footprints size={13} />
+                    ) : (
+                      <Car size={13} />
+                    )}
+                    כ־
+                    {Math.ceil(
+                      route.data.legs[legAfter.get(a.id)!].duration / 60,
+                    )}{" "}
+                    דקות ·{" "}
+                    {(
+                      route.data.legs[legAfter.get(a.id)!].distance / 1000
+                    ).toFixed(1)}{" "}
+                    ק״מ
+                  </div>
+                )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </SortableContext>
       {!activities.length && (
         <div className="day-empty">
-          <MapPin size={24} />
+          <img
+            className="empty-illustration"
+            src="/images/illustrations/day.webp"
+            alt=""
+            loading="lazy"
+          />
           <p>
             {target === "saved"
               ? "מצאתם מקום מעניין? שמרו אותו כאן ליום הנכון."
@@ -729,7 +902,7 @@ export function TripWorkspace({
   );
   const cover = plan.cover?.url || destinationImage(plan.metadata.destination);
   return (
-    <div className="workspace">
+    <div className="workspace" ref={workspaceRef}>
       <PrintTrip plan={plan} />
       <SiteHeader compact />
       <div className="trip-toolbar">
@@ -853,6 +1026,7 @@ export function TripWorkspace({
                   setMobileMap(false);
                 }}
               >
+                {tab === item.id && <ActivePill group="sidebar-tab" />}
                 <item.icon size={17} />
                 {item.label}
                 {item.id === "saved" && (
@@ -870,6 +1044,7 @@ export function TripWorkspace({
               }}
               className={day === "all" ? "active" : ""}
             >
+              {day === "all" && <ActivePill group="sidebar-day" />}
               כל הטיול
             </button>
             {plan.days.map((d) => (
@@ -881,6 +1056,7 @@ export function TripWorkspace({
                 }}
                 className={day === d.day_number ? "active" : ""}
               >
+                {day === d.day_number && <ActivePill group="sidebar-day" />}
                 <span
                   style={{
                     background:
@@ -924,6 +1100,7 @@ export function TripWorkspace({
               className={!mobileMap ? "active" : ""}
               onClick={() => setMobileMap(false)}
             >
+              {!mobileMap && <ActivePill group="mobile-view" />}
               <List size={16} />
               רשימה
             </button>
@@ -931,6 +1108,7 @@ export function TripWorkspace({
               className={mobileMap ? "active" : ""}
               onClick={() => setMobileMap(true)}
             >
+              {mobileMap && <ActivePill group="mobile-view" />}
               <MapIcon size={16} />
               מפה
             </button>
@@ -989,6 +1167,7 @@ export function TripWorkspace({
                         className={day === "all" ? "active" : ""}
                         onClick={() => setDay("all")}
                       >
+                        {day === "all" && <ActivePill group="day-chip" />}
                         כל הימים
                       </button>
                       {plan.days.map((d) => (
@@ -997,6 +1176,9 @@ export function TripWorkspace({
                           onClick={() => setDay(d.day_number)}
                           className={day === d.day_number ? "active" : ""}
                         >
+                          {day === d.day_number && (
+                            <ActivePill group="day-chip" />
+                          )}
                           יום {d.day_number}
                         </button>
                       ))}
@@ -1009,25 +1191,6 @@ export function TripWorkspace({
                         onSend={(text) => void refine(text)}
                         onUndo={undoRefine}
                       />
-                    )}
-                    {generating && (
-                      <>
-                        <div className="ai-progress" role="status">
-                          <Loader2 className="animate-spin" />
-                          <strong>מחברים את כל הרעיונות למסלול…</strong>
-                          <p>זה יכול לקחת מעט זמן. הטיול כבר נשמר.</p>
-                        </div>
-                        {[0, 1, 2].map((i) => (
-                          <div className="skeleton-card" key={i} aria-hidden>
-                            <div>
-                              <div className="skeleton-line short" />
-                              <div className="skeleton-line" />
-                              <div className="skeleton-line medium" />
-                            </div>
-                            <div className="skeleton-photo" />
-                          </div>
-                        ))}
-                      </>
                     )}
                     {aiError && (
                       <div className="form-error" role="alert">
@@ -1042,7 +1205,9 @@ export function TripWorkspace({
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
+                  onDragStart={() => setDragging(true)}
                   onDragEnd={dragEnd}
+                  onDragCancel={settleDrag}
                   accessibility={{
                     screenReaderInstructions: {
                       draggable:
@@ -1138,6 +1303,7 @@ export function TripWorkspace({
                     className={mode === "WALK" ? "active" : ""}
                     onClick={() => setMode("WALK")}
                   >
+                    {mode === "WALK" && <ActivePill group="map-mode" />}
                     <Footprints size={16} />
                   </button>
                   <button
@@ -1145,6 +1311,7 @@ export function TripWorkspace({
                     className={mode === "DRIVE" ? "active" : ""}
                     onClick={() => setMode("DRIVE")}
                   >
+                    {mode === "DRIVE" && <ActivePill group="map-mode" />}
                     <Car size={16} />
                   </button>
                 </div>
@@ -1156,7 +1323,9 @@ export function TripWorkspace({
                   </div>
                 }
               >
-                {(!smallScreen || mobileMap) && (
+                {/* Mounted once and kept: every new map instance is a billed
+                    map load, and CSS already hides the panel on phones. */}
+                {mapMounted && (
                   <MapComponent
                     activities={mapActivities}
                     selectedActivityId={selected}
@@ -1191,27 +1360,25 @@ export function TripWorkspace({
           </div>
         </div>
       </div>
-      <Dialog
+      <Drawer
         open={!!previewed && mobileMap}
         onOpenChange={(open) => {
           if (!open) setPreview(null);
         }}
       >
-        {previewed && (
-          <DialogContent className="activity-preview">
-            <DialogTitle className="sr-only">
-              {previewed.activity.name}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
+        {sheet && (
+          <DrawerContent className="activity-preview">
+            <DrawerTitle className="sr-only">{sheet.activity.name}</DrawerTitle>
+            <DrawerDescription className="sr-only">
               פרטי התחנה שנבחרה במפה
-            </DialogDescription>
+            </DrawerDescription>
             <ActivityCard
-              key={previewed.activity.id}
-              activity={previewed.activity}
+              key={sheet.activity.id}
+              activity={sheet.activity}
               meta={plan.metadata}
-              index={previewed.index}
-              color={previewed.color}
-              day={previewed.day}
+              index={sheet.index}
+              color={sheet.color}
+              day={sheet.day}
               dayCount={plan.days.length}
               access={access}
               readOnly={locked}
@@ -1219,14 +1386,14 @@ export function TripWorkspace({
               onSelect={() => undefined}
               onEdit={() => {
                 setPreview(null);
-                setDialog({ activity: previewed.activity, day: previewed.day });
+                setDialog({ activity: sheet.activity, day: sheet.day });
               }}
               onMove={(d, index) =>
-                edit((p) => moveActivity(p, previewed.activity.id, d, index))
+                edit((p) => moveActivity(p, sheet.activity.id, d, index))
               }
               onDelete={() => {
                 if (window.confirm("להסיר את התחנה מהטיול?")) {
-                  const id = previewed.activity.id;
+                  const id = sheet.activity.id;
                   setPreview(null);
                   edit((p) => ({
                     ...p,
@@ -1238,14 +1405,14 @@ export function TripWorkspace({
                   }));
                 }
               }}
-              onSwap={() => void swap(previewed.activity, previewed.day)}
-              swapping={swapping === previewed.activity.id}
+              onSwap={() => void swap(sheet.activity, sheet.day)}
+              swapping={swapping === sheet.activity.id}
               onDetails={onDetails}
               onCache={cachePlace}
             />
-          </DialogContent>
+          </DrawerContent>
         )}
-      </Dialog>
+      </Drawer>
       {dialog && (
         <ActivityDialog
           key={dialog.activity?.id || "new"}

@@ -6,6 +6,9 @@ let loader: Promise<void> | undefined;
 let authFailed = false;
 const reducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Pins drop in once per stop for the session, so a remount (or a trip
+// reopened later in the same session) does not replay the animation.
+const droppedStops = new Set<string>();
 Object.assign(window, {
   gm_authFailure: () => {
     authFailed = true;
@@ -60,11 +63,14 @@ export default function MapComponent({
   const element = useRef<HTMLDivElement>(null),
     map = useRef<google.maps.Map>(),
     markers = useRef<google.maps.Marker[]>([]),
+    lastBounds = useRef<google.maps.LatLngBounds>(),
     line = useRef<google.maps.Polyline>();
   const [ready, setReady] = useState(false),
     [error, setError] = useState("");
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
+  const lastSelected = useRef(selectedActivityId),
+    clickedMarker = useRef<string>();
   useEffect(() => {
     if (!config.mapsKey) return;
     const fail = () =>
@@ -100,17 +106,18 @@ export default function MapComponent({
     if (!ready || !map.current) return;
     markers.current.forEach((m) => m.setMap(null));
     const bounds = new google.maps.LatLngBounds();
-    // Drop pins in on the first paint only; later updates stay quiet.
-    const firstPaint = markers.current.length === 0 && !reducedMotion();
+    const quiet = reducedMotion();
     markers.current = activities
       .filter((a) => a.coordinates)
       .map((a) => {
         bounds.extend(a.coordinates!);
+        const drop = !quiet && !droppedStops.has(a.id);
+        droppedStops.add(a.id);
         const marker = new google.maps.Marker({
           map: map.current,
           position: a.coordinates,
           title: a.name,
-          animation: firstPaint ? google.maps.Animation.DROP : undefined,
+          animation: drop ? google.maps.Animation.DROP : undefined,
           label: {
             text: String(a.number),
             color: "#ffffff",
@@ -126,9 +133,13 @@ export default function MapComponent({
             strokeWeight: 3,
           },
         });
-        marker.addListener("click", () => selectRef.current(a.id));
+        marker.addListener("click", () => {
+          clickedMarker.current = a.id;
+          selectRef.current(a.id);
+        });
         return marker;
       });
+    lastBounds.current = bounds;
     if (!bounds.isEmpty()) {
       map.current.fitBounds(bounds, 65);
       if (activities.length === 1)
@@ -143,8 +154,15 @@ export default function MapComponent({
     const index = placed.findIndex((a) => a.id === selectedActivityId);
     if (index < 0) return;
     map.current?.panTo(placed[index].coordinates!);
-    if (reducedMotion()) return;
-    // A single short bounce points at the chosen stop without nagging.
+    const changed = lastSelected.current !== selectedActivityId,
+      fromMarker = clickedMarker.current === selectedActivityId;
+    lastSelected.current = selectedActivityId;
+    if (changed) clickedMarker.current = undefined;
+    // A single short bounce points at a stop picked from the list. Skip it
+    // when the marker itself was tapped (the user already knows where it is,
+    // and on mobile the preview dialog covers it) and when only the data
+    // refreshed, e.g. place details arriving.
+    if (!changed || fromMarker || reducedMotion()) return;
     const marker = markers.current[index];
     marker?.setAnimation(google.maps.Animation.BOUNCE);
     const timer = window.setTimeout(() => marker?.setAnimation(null), 700);
@@ -153,6 +171,24 @@ export default function MapComponent({
       marker?.setAnimation(null);
     };
   }, [selectedActivityId, activities, ready]);
+  // The panel is hidden with CSS rather than unmounted, so the map can come
+  // back from a zero-sized container and needs to re-measure and re-fit.
+  useEffect(() => {
+    if (!ready || !element.current) return;
+    let hidden = element.current.clientWidth === 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const visible =
+        entry.contentRect.width > 0 && entry.contentRect.height > 0;
+      if (visible && hidden && map.current) {
+        google.maps.event.trigger(map.current, "resize");
+        if (lastBounds.current && !lastBounds.current.isEmpty())
+          map.current.fitBounds(lastBounds.current, 65);
+      }
+      hidden = !visible;
+    });
+    observer.observe(element.current);
+    return () => observer.disconnect();
+  }, [ready]);
   useEffect(() => {
     if (!ready) return;
     line.current?.setMap(null);

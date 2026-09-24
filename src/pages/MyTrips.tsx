@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import {
   Plus,
@@ -11,6 +12,7 @@ import {
   Compass,
 } from "lucide-react";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
+import { SplitWords } from "@/components/SplitWords";
 import { Button } from "@/components/ui/button";
 import { useAuthState } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,7 +72,9 @@ export default function MyTrips() {
         <div className="section-heading">
           <div>
             <span className="eyebrow">המקומות שלכם. הסיפורים שלכם.</span>
-            <h1>הטיולים שלי</h1>
+            <h1>
+              <SplitWords text="הטיולים שלי" />
+            </h1>
             <p>כל ההרפתקאות, אלה שהיו ואלה שעוד בדרך.</p>
           </div>
           <Button asChild>
@@ -82,7 +86,11 @@ export default function MyTrips() {
         </div>
         {!user && !loading ? (
           <div className="empty-state">
-            <Compass size={42} />
+            <img
+              className="empty-illustration"
+              src="/images/illustrations/route.webp"
+              alt=""
+            />
             <h2>הטיולים שלכם מחכים כאן</h2>
             <p>היכנסו לחשבון כדי לשמור מסלולים ולחזור אליהם בכל זמן.</p>
             <Button asChild>
@@ -96,6 +104,7 @@ export default function MyTrips() {
               <input
                 aria-label="חיפוש בטיולים"
                 placeholder="חיפוש לפי שם הטיול או היעד…"
+                enterKeyHint="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -113,11 +122,18 @@ export default function MyTrips() {
               </div>
             ) : (
               <div className="trip-grid">
-                {filtered.map((t) => {
+                {filtered.map((t, i) => {
                   const p = normalizePlan(t.trip_data, t.destination),
                     image = p.cover?.url || destinationImage(t.destination);
                   return (
-                    <article className="saved-trip-card" key={t.id}>
+                    <article
+                      className="saved-trip-card"
+                      key={t.id}
+                      data-reveal
+                      style={
+                        { "--reveal-delay": (i % 3) * 70 + "ms" } as CSSProperties
+                      }
+                    >
                       <Link to={`/trip/${t.id}`} className="trip-card-photo">
                         {image ? (
                           <img src={image} alt={t.destination} loading="lazy" />
@@ -186,6 +202,12 @@ export default function MyTrips() {
                   );
                 })}
                 <Link to="/trip/new" className="new-trip-card">
+                  <img
+                    className="empty-illustration"
+                    src="/images/illustrations/route.webp"
+                    alt=""
+                    loading="lazy"
+                  />
                   <span>
                     <Plus size={29} />
                   </span>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { beat, cssEase, easeInOut } from "@/lib/motion";
 import {
   GripVertical,
   MapPin,
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   Trash2,
   ExternalLink,
+  MoreHorizontal,
 } from "lucide-react";
 import type {
   Activity,
@@ -32,7 +34,17 @@ import { placeCacheFresh } from "@/lib/place-cache";
 // Keep provider data for the session so switching days, tabs or the map
 // does not re-request the same place and photo.
 const SESSION_CACHE = 60 * 60 * 1000;
+// Stops animate in the first time they appear, not on every remount from
+// switching days, tabs or the map preview.
+const shownStops = new Set<string>();
 import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 interface Props {
   activity: Activity;
   index: number;
@@ -56,6 +68,8 @@ interface Props {
     TripMetadata,
     "destination" | "startDate" | "endDate" | "travelers"
   >;
+  /** This stop sits far from the rest of the trip, so the link looks wrong. */
+  farFromTrip?: boolean;
   /** Persist freshly fetched Google content into the trip (owner only). */
   onCache?: (id: string, place: PlaceDetails, photo: PlacePhoto) => void;
 }
@@ -76,10 +90,14 @@ export function ActivityCard({
   swapping,
   onDetails,
   onCache,
+  farFromTrip = false,
   date = null,
   meta,
 }: Props) {
   const kind = stopKind(a);
+  // dnd-kit shifts the neighbours while dragging (zoox.com's in-out curve at
+  // its 0.334s beat); TripWorkspace glides the dropped card into its slot and
+  // pauses the Motion wrapper for the drag, so nothing else animates the move.
   const {
     attributes,
     listeners,
@@ -87,10 +105,19 @@ export function ActivityCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: a.id, disabled: readOnly });
+  } = useSortable({
+    id: a.id,
+    disabled: readOnly,
+    transition: { duration: beat[0] * 1000, easing: cssEase(easeInOut) },
+    animateLayoutChanges: () => false,
+  });
   const visibility = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false),
-    [imageFailed, setImageFailed] = useState(false);
+    [imageFailed, setImageFailed] = useState(false),
+    [entering] = useState(() => !shownStops.has(a.id));
+  useEffect(() => {
+    shownStops.add(a.id);
+  }, [a.id]);
   useEffect(() => {
     if (!visibility.current) return;
     const observer = new IntersectionObserver(
@@ -143,8 +170,8 @@ export function ActivityCard({
     <article
       ref={setNodeRef}
       id={`activity-${a.id}`}
-      className={`activity-card is-${kind} ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`activity-card is-${kind} ${entering ? "is-entering" : ""} ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
     >
       <div ref={visibility} className="activity-content">
         <div className="activity-topline">
@@ -298,6 +325,12 @@ export function ActivityCard({
             {!readOnly && <button onClick={onEdit}>בחירת מקום</button>}
           </div>
         )}
+        {farFromTrip && !readOnly && (
+          <div className="verification-note">
+            התחנה הזו רחוקה משאר התחנות בטיול. ייתכן שהיא קושרה למקום עם שם דומה
+            במקום אחר. <button onClick={onEdit}>בדיקה והחלפה</button>
+          </div>
+        )}
         {a.place_id && a.auto_linked && !readOnly && (
           <div className="verification-note">
             קושר אוטומטית לפי השם{p ? ` אל ${p.name}` : ""}. לא המקום הנכון?{" "}
@@ -352,23 +385,6 @@ export function ActivityCard({
               <Pencil size={13} />
               עריכה
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="העברה למעלה"
-              disabled={index === 0}
-              onClick={() => onMove(day, index - 1)}
-            >
-              <ChevronUp />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="העברה למטה"
-              onClick={() => onMove(day, index + 1)}
-            >
-              <ChevronDown />
-            </Button>
             <select
               aria-label={`העברת ${a.name} ליום אחר`}
               value={day}
@@ -385,23 +401,49 @@ export function ActivityCard({
                 </option>
               ))}
             </select>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="הצעת פעילות חלופית עם AI"
-              disabled={swapping || !!a.transport || !!a.lodging}
-              onClick={onSwap}
-            >
-              <RefreshCw className={swapping ? "animate-spin" : ""} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="הסרת פעילות"
-              onClick={onDelete}
-            >
-              <Trash2 />
-            </Button>
+            <DropdownMenu dir="rtl">
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`עוד פעולות עבור ${a.name}`}
+                >
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="stop-menu">
+                <DropdownMenuItem
+                  disabled={index === 0}
+                  onSelect={() => onMove(day, index - 1)}
+                >
+                  <ChevronUp size={15} />
+                  העברה למעלה
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onMove(day, index + 1)}>
+                  <ChevronDown size={15} />
+                  העברה למטה
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={swapping || !!a.transport || !!a.lodging}
+                  onSelect={() => onSwap()}
+                >
+                  <RefreshCw
+                    size={15}
+                    className={swapping ? "animate-spin" : ""}
+                  />
+                  הצעה חלופית מ־AI
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="is-destructive"
+                  onSelect={onDelete}
+                >
+                  <Trash2 size={15} />
+                  הסרת התחנה
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>

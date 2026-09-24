@@ -1,4 +1,4 @@
-﻿# Planatrip
+﻿# Masluli
 
 מערכת תכנון טיולים בעברית וב־RTL: מסלול יומי, מפה, מקומות ממתינים, אומדני תקציב, הוצאות, שמירה אוטומטית ושיתוף לצפייה. React 18, TypeScript, Vite 7, Tailwind, shadcn ו־Supabase. המבנה בהשראת Wanderlog, עם מיתוג ועיצוב עצמאיים.
 
@@ -14,13 +14,13 @@ npm run dev
 
 האתר נפתח ב־http://127.0.0.1:8080. קובץ HTML לבדו אינו מריץ את React; יש לפתוח דרך שרת Vite. אין לדרוס קובץ .env קיים. מפתחות שמתחילים ב־VITE_ נכנסים לבנייה ונגישים בדפדפן.
 
-| הגדרה ציבורית | משמעות |
-| --- | --- |
-| VITE_SUPABASE_URL | כתובת הפרויקט |
-| VITE_SUPABASE_PUBLISHABLE_KEY | מפתח publishable או anon בלבד |
-| VITE_GOOGLE_MAPS_API_KEY | מפתח דפדפן של Google Maps JavaScript API |
-| VITE_BOOKING_AID | מזהה שותף של Booking.com לקישורי הזמנה (לא חובה) |
-| VITE_GYG_PARTNER_ID | מזהה שותף של GetYourGuide לקישורי כרטיסים (לא חובה) |
+| הגדרה ציבורית                 | משמעות                                              |
+| ----------------------------- | --------------------------------------------------- |
+| VITE_SUPABASE_URL             | כתובת הפרויקט                                       |
+| VITE_SUPABASE_PUBLISHABLE_KEY | מפתח publishable או anon בלבד                       |
+| VITE_GOOGLE_MAPS_API_KEY      | מפתח דפדפן של Google Maps JavaScript API            |
+| VITE_BOOKING_AID              | מזהה שותף של Booking.com לקישורי הזמנה (לא חובה)    |
+| VITE_GYG_PARTNER_ID           | מזהה שותף של GetYourGuide לקישורי כרטיסים (לא חובה) |
 
 אפשר להשתמש ב־.env.local לערכים מקומיים; הוא מוחרג מ־Git וגובר על .env. הותקנו @supabase/supabase-js ו־@supabase/ssr. אפליקציית Vite משתמשת בלקוח שב־src/integrations/supabase/client.ts, עם persistSession, autoRefreshToken ו־detectSessionInUrl. דוגמאות NEXT_PUBLIC, next/headers ו־middleware של Next.js אינן שייכות להרצה זו; אין כאן שרת Next.js או צורך ב־SSR cookies.
 
@@ -48,14 +48,14 @@ psql --single-transaction -v ON_ERROR_STOP=1 -f supabase/baseline.sql
 
 העתיקו `supabase/functions/.env.example` אל קובץ מקומי שלא נכנס ל־Git, ומלאו אותו ב־Supabase Secrets. אין לשלוח מפתחות שרת לדפדפן.
 
-| סוד | נדרש עבור |
-| --- | --- |
-| GOOGLE_MAPS_SERVER_KEY | Places API (New), Place Photos ו־Routes API |
-| OPENROUTER_API_KEY | יצירה והחלפה של פעילויות באמצעות AI |
-| OPENROUTER_MODEL | מזהה מודל זמין בחשבון; ברירת המחדל מוגדרת בקובץ הדוגמה |
-| UNSPLASH_ACCESS_KEY | תמונת אווירה ליעד עם קרדיט |
-| ALLOWED_ORIGINS | כתובות origin מותרות, מופרדות בפסיקים, ללא slash בסוף |
-| PROVIDER_DAILY_LIMIT | מכסת בקשות יומית לכל סוג פעולה; ברירת מחדל 1000 |
+| סוד                    | נדרש עבור                                              |
+| ---------------------- | ------------------------------------------------------ |
+| GOOGLE_MAPS_SERVER_KEY | Places API (New), Place Photos ו־Routes API            |
+| OPENROUTER_API_KEY     | יצירה והחלפה של פעילויות באמצעות AI                    |
+| OPENROUTER_MODEL       | מזהה מודל זמין בחשבון; ברירת המחדל מוגדרת בקובץ הדוגמה |
+| UNSPLASH_ACCESS_KEY    | תמונת אווירה ליעד עם קרדיט                             |
+| ALLOWED_ORIGINS        | כתובות origin מותרות, מופרדות בפסיקים, ללא slash בסוף  |
+| PROVIDER_DAILY_LIMIT   | מכסת בקשות יומית לכל סוג פעולה; ברירת מחדל 1000        |
 
 SUPABASE_URL, SUPABASE_ANON_KEY ו־SUPABASE_SERVICE_ROLE_KEY מסופקים ב־Edge runtime. בשרת נשמר שימוש ב־anon JWT עבור אימות משתמשים ו־RPC ציבורי; מפתח service role משמש רק למכסות.
 
@@ -80,13 +80,39 @@ npx supabase functions deploy unsplash-image --project-ref YOUR_PROJECT_REF
 3. צרו מפתח שרת נפרד, מוגבל ל־Places API (New) ו־Routes API. שמרו אותו ב־Supabase Secrets. הגבלת IP דורשת יציאת רשת קבועה; אל תגדירו את כתובת המחשב האישי ככתובת שרת Supabase.
 4. ב־Google Cloud → APIs & Services → Quotas הגדירו מכסות לכל API. ב־Billing → Budgets & alerts הגדירו תקציב והתראות, למשל 50%, 80%, 100%. התראות תקציב אינן עוצרות חיוב. בדקו את ההגדרות העדכניות ב[ניהול עלויות Google](https://developers.google.com/maps/billing-and-pricing/manage-costs).
 
-חיפושים מושהים ב־400–450ms, תצלומים נטענים עבור כרטיסים שנכנסים לתצוגה, ושדות Places מפורטים בקוד באמצעות FieldMask. דירוגים ושעות פתיחה עשויים להפעיל SKU יקר יותר. Autocomplete מחויב לפי בקשה; הקוד אינו מתחיל session שאינו מסיים. קיימות מכסות משתמש, מכסת קישור שיתוף ומכסה יומית לכל פעולה במסד. בקשת תמונה ויצירת מסלול AI עשויות לגרום לכמה בקשות ספק, ומפה בדפדפן מחויבת בנפרד: מכסת האפליקציה אינה תקרת הוצאה כספית. [מחירון Google](https://developers.google.com/maps/billing-and-pricing/pricing).
+חיפושים מושהים ב־600ms ומתחילים משלושה תווים, תצלומים נטענים עבור כרטיסים שנכנסים לתצוגה, ושדות Places מפורטים בקוד באמצעות FieldMask. דירוגים ושעות פתיחה עשויים להפעיל SKU יקר יותר. Autocomplete מחויב לפי בקשה; הקוד אינו מתחיל session שאינו מסיים. קיימות מכסות משתמש, מכסת קישור שיתוף ומכסה יומית לכל פעולה במסד. בקשת תמונה ויצירת מסלול AI עשויות לגרום לכמה בקשות ספק, ומפה בדפדפן מחויבת בנפרד: מכסת האפליקציה אינה תקרת הוצאה כספית. [מחירון Google](https://developers.google.com/maps/billing-and-pricing/pricing).
 
-נשמרים מזהי place_id ונתוני תכנון שהמשתמש/AI כתב. פרטי Google, קואורדינטות מהספק, דירוגים, תמונות ותוואי מסלול נשארים בזיכרון התצוגה ונמחקים בעת סגירתה. מזהי תמונות אינם נשמרים במסד. פרטי מקום ותמונות מוצגים עם ייחוס וקישור למקור; נתוני Google מוצגים רק על Google Maps. הדפסה מייצאת את נתוני התכנון בלבד. [מדיניות Places](https://developers.google.com/maps/documentation/places/web-service/policies), [Place Photos](https://developers.google.com/maps/documentation/places/web-service/place-photos).
+נשמרים מזהי place_id ונתוני תכנון שהמשתמש/AI כתב. פרטי Google (שם, כתובת, קואורדינטות, דירוג, שעות, קישורים וקישור תמונה) נשמרים זמנית בתוך הטיול שעבורו נשלפו, עד 30 יום, כדי לחסוך קריאות חוזרות; הם לא משותפים בין טיולים או משתמשים ולא מוצגים מחוץ לטיול. פתיחת טיול מרעננת אותם, והפונקציה `purge_expired_place_cache` (שרצה יומית דרך pg_cron) מוחקת אותם מטיולים שלא נפתחו בזמן. תוואי המסלול נשאר בזיכרון התצוגה. מזהי תמונות אינם נשמרים במסד. אין טבלה משותפת של תוצאות חיפוש או קואורדינטות: לפי הבירור מול Google, מאגר כזה חוצה את הקו בין cache ליצירת מסד נתונים. פרטי מקום ותמונות מוצגים עם ייחוס וקישור למקור; נתוני Google מוצגים רק על Google Maps. הדפסה מייצאת את נתוני התכנון בלבד. [מדיניות Places](https://developers.google.com/maps/documentation/places/web-service/policies), [Place Photos](https://developers.google.com/maps/documentation/places/web-service/place-photos).
 
 תמונת יעד שמגיעה דרך Unsplash API נשמרת כקישור המקורי של הספק, עם פרטי ייחוס ו־UTM. הפונקציה מדווחת בחירה ל־download_location. אין להעתיק את התמונה הזו לשרת מקומי או להחליף את כתובת ה־hotlink. תמונות ההשראה הסטטיות ב־public/images נבחרו בנפרד; המקורות מפורטים ב־docs/media-credits.md. [תיעוד Unsplash](https://unsplash.com/documentation).
 
 אין מחירי טיסות/מלונות בזמן אמת, הזמנות או עריכה משותפת. הסכומים הם בשקלים: אומדן מתוכנן והוצאות בפועל נפרדים. מחיר חסר נשאר לא ידוע. מקור AI מסומן; רמת מחיר מ־Google אינה מחיר כרטיס. קישור אתר המקום מאפשר לבדוק פרטים אצל המקור.
+
+### מדידת עלות
+
+כל קריאה בתשלום נרשמת בטבלה `provider_usage`, והמחירים יושבים ב־`provider_prices` כדי שאפשר יהיה לעדכן אותם בלי פריסה. הרישום נעשה מהפונקציות בלבד; ללקוח אין גישה. כישלון ברישום לא מפיל בקשה של משתמש.
+
+שתי שאילתות ב־SQL Editor של Supabase:
+
+```sql
+-- כמה עלה כל טיול, מהיקר לזול
+SELECT * FROM provider_cost_by_trip ORDER BY usd DESC LIMIT 20;
+
+-- עלות יומית לפי SKU, מול המכסה החינמית החודשית
+SELECT * FROM provider_cost_daily WHERE day > now() - interval '30 days';
+```
+
+עלות ממוצעת לטיול, ופירוק לפי סוג קריאה:
+
+```sql
+SELECT round(avg(usd), 3) AS avg_usd, count(*) AS trips FROM provider_cost_by_trip WHERE trip_id IS NOT NULL;
+
+SELECT u.sku, sum(u.units) AS units, round(sum(u.units * p.usd_per_unit), 2) AS usd
+FROM provider_usage u JOIN provider_prices p USING (sku)
+WHERE u.at > now() - interval '30 days' GROUP BY 1 ORDER BY 3 DESC;
+```
+
+טוקנים של ה־AI נרשמים לפי הדיווח של OpenRouter, ולכן העלות שלהם נמדדת ולא מוערכת. שימו לב שהמכסות החינמיות של Google מתאפסות כל חודש, וש־`usd` בשאילתות הוא מחיר מלא בלי להתחשב בהן.
 
 ## מבנה ושמירה
 

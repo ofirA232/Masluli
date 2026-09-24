@@ -5,6 +5,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "./ui/dialog";
+import { useClosingDialog } from "@/hooks/useClosingDialog";
 import { Button } from "./ui/button";
 import { TravelersEditor } from "./TravelersEditor";
 import { dayCount, dateOnly } from "@/lib/trips";
@@ -19,6 +20,7 @@ export function TripSettings({
   onSave: (p: TripPlan) => void;
   onClose: () => void;
 }) {
+  const dialog = useClosingDialog(onClose);
   const [meta, setMeta] = useState(plan.metadata),
     [error, setError] = useState("");
   const inUse = new Set(
@@ -67,16 +69,11 @@ export function TripSettings({
       saved_places: saved,
       expenses: pruneTravelerRefs(plan.expenses, travelersList),
     });
-    onClose();
+    dialog.close();
   };
   return (
-    <Dialog
-      open
-      onOpenChange={(v) => {
-        if (!v) onClose();
-      }}
-    >
-      <DialogContent className="activity-dialog">
+    <Dialog {...dialog.rootProps}>
+      <DialogContent className="activity-dialog" {...dialog.contentProps}>
         <DialogTitle>פרטי הטיול</DialogTitle>
         <DialogDescription>
           הטיול משתנה איתכם. שינוי התאריכים שומר את התחנות שלכם.
