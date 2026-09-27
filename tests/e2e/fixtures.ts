@@ -7,8 +7,11 @@ export const initialPlan: TripPlan = {
   metadata: {
     title: "שלושה ימים בפריז",
     destination: "פריז",
-    startDate: "2026-10-04",
-    endDate: "2026-10-06",
+    // Trip dates stay in the future: the date picker refuses past days, and
+    // on a date inside the trip the workspace opens on "today" instead of
+    // day 1.
+    startDate: "2027-10-04",
+    endDate: "2027-10-06",
     travelers: 2,
     travelersList: [
       { id: "t1", name: "דנה" },
