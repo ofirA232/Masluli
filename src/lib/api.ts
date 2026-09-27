@@ -40,10 +40,12 @@ export async function searchPlaces(
   language: "he" | "en" = "he",
   /** Google's free tier: place IDs only, no names or coordinates. */
   idsOnly = false,
+  /** Bias the search here instead of the destination as a whole. */
+  near?: PlaceArea,
 ): Promise<SearchResult> {
   const key = destination.trim().toLowerCase();
   const pending = areas.get(key);
-  const area = pending ? await pending : null;
+  const area = near ?? (pending ? await pending : null);
   const request = invoke<SearchResult>("places", {
     action: "search",
     query,

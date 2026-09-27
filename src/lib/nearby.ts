@@ -90,25 +90,58 @@ export interface Spread {
 }
 /**
  * How spread out a day is, from the real coordinates of its stops (straight
- * lines, in visiting order). Needs at least three placed stops to say.
+ * lines, in visiting order). A travel stop (a train, a ferry, the subway)
+ * splits the day: the way between the two sides is the journey itself, so
+ * only hops within each side count. Needs at least three placed stops.
  */
 export function daySpread(
-  stops: { name: string; at?: LatLng | null }[],
+  stops: { name: string; at?: LatLng | null; travel?: boolean }[],
 ): Spread | null {
-  const placed = stops.filter((s): s is { name: string; at: LatLng } => !!s.at);
-  if (placed.length < 3) return null;
+  if (stops.filter((s) => !s.travel && s.at).length < 3) return null;
   const spread: Spread = { longest: 0, total: 0, from: "", to: "" };
-  for (let i = 1; i < placed.length; i++) {
-    const m = metresBetween(placed[i - 1].at, placed[i].at);
-    spread.total += m;
-    if (m > spread.longest)
-      Object.assign(spread, {
-        longest: m,
-        from: placed[i - 1].name,
-        to: placed[i].name,
-      });
+  let prev: { name: string; at: LatLng } | null = null;
+  for (const s of stops) {
+    if (s.travel) {
+      prev = null;
+      continue;
+    }
+    if (!s.at) continue;
+    if (prev) {
+      const m = metresBetween(prev.at, s.at);
+      spread.total += m;
+      if (m > spread.longest)
+        Object.assign(spread, { longest: m, from: prev.name, to: s.name });
+    }
+    prev = { name: s.name, at: s.at };
   }
   return spread;
+}
+/**
+ * How far a stop may sit from the nearest other stop of its day before its
+ * link is doubted: a same-named place in another town (a "Pastel's" 65 km up
+ * the Hudson on a Manhattan day). Nobody goes 20 km for lunch, so a meal is
+ * held closer than a sight. A day trip is not flagged, since its stops
+ * cluster together; only a lone far point is.
+ */
+export function isolationLimit(mode: GettingAround | null, meal = false) {
+  const km =
+    mode === "foot" ? (meal ? 2 : 5) : mode === "car" ? (meal ? 15 : 25) : meal ? 5 : 10;
+  return km * 1_000;
+}
+/** Metres from a point to the nearest of the others. */
+export const nearestOf = (at: LatLng, others: LatLng[]) =>
+  Math.min(...others.map((o) => metresBetween(at, o)));
+/** The middle of a set of points (per-axis median, robust to one far off). */
+export function middleOf(points: LatLng[]): LatLng {
+  const median = (v: number[]) => {
+    const s = [...v].sort((a, b) => a - b),
+      m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  return {
+    lat: median(points.map((p) => p.lat)),
+    lng: median(points.map((p) => p.lng)),
+  };
 }
 // What still fits a day, by how the travellers get around. On foot a hop is
 // a walk or a few stops (3 km); mixed allows a day trip out and back; by car
