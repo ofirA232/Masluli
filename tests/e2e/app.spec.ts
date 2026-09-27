@@ -185,6 +185,51 @@ test("AI stops link through the free search, paying only for a miss", async ({
   expect(calls).toEqual({ ids: 2, named: 1 });
 });
 
+test("a day too spread for how the trip gets around offers to tighten it", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const rome = [
+    { name: "הקולוסיאום", at: { lat: 41.8902, lng: 12.4922 } },
+    { name: "וילה ד'אסטה", at: { lat: 41.9636, lng: 12.7982 } },
+    { name: "מזרקת טרווי", at: { lat: 41.9009, lng: 12.4833 } },
+  ];
+  const base = initialPlan.days[0].activities[0];
+  state.row.trip_data.metadata.gettingAround = "foot";
+  state.row.trip_data.days[0].activities = rome.map((r, i) => ({
+    ...base,
+    id: "rome-" + i,
+    name: r.name,
+    source: "manual",
+    place_id: undefined,
+    coordinates: r.at,
+  }));
+  let asked: { message: string; focus_day: number | null } | null = null;
+  await page.route("**/functions/v1/refine-itinerary**", (route) => {
+    asked = route.request().postDataJSON();
+    return route.fulfill({ json: { days: [], summary: "" } });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/trip/" + tripId);
+  const note = page.locator(".day-spread").first();
+  await expect(note).toContainText("היום הזה מפוזר להליכה");
+  await expect(note).toContainText("וילה ד'אסטה");
+  await page
+    .locator(".itinerary-day")
+    .first()
+    .screenshot({ path: "artifacts/day-spread.png" });
+  await note.getByRole("button", { name: "צמצום היום" }).click();
+  await expect.poll(() => asked?.focus_day).toBe(1);
+  expect(asked!.message).toContain("יום 1 מפוזר מדי להליכה");
+
+  // The same day by car is fine, and the map starts on driving legs.
+  state.row.trip_data.metadata.gettingAround = "car";
+  await page.reload();
+  await expect(page.locator(".itinerary-day").first()).toBeVisible();
+  await expect(page.locator(".day-spread")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "מסלולי נהיגה" })).toHaveClass(/active/);
+});
+
 test("failed saves preserve the draft and retry successfully", async ({
   page,
 }) => {

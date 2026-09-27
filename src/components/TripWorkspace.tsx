@@ -95,10 +95,14 @@ import { destinationImage } from "@/lib/destinations";
 import { usePlanCover } from "@/components/PlanLoading";
 import { useLiveLocation } from "@/hooks/useLiveLocation";
 import {
+  daySpread,
   distanceLabel,
+  formatDistance,
   localDate,
   metresBetween,
+  tightenRequest,
   todayCues,
+  tooSpread,
 } from "@/lib/nearby";
 import { beat, cssEase, easeInOut, power2In } from "@/lib/motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -177,7 +181,10 @@ export function TripWorkspace({
     [chat, setChat] = useState<ChatMessage[]>([]),
     [refining, setRefining] = useState(false),
     [sharing, setSharing] = useState(false),
-    [mode, setMode] = useState<"WALK" | "DRIVE">("WALK"),
+    // The map's legs start in the trip's own way of getting around.
+    [mode, setMode] = useState<"WALK" | "DRIVE">(
+      plan.metadata.gettingAround === "car" ? "DRIVE" : "WALK",
+    ),
     [details, setDetails] = useState<Record<string, PlaceDetails>>({});
   // True from the first time the map panel is visible, and never false again.
   const [mapMounted, setMapMounted] = useState(false);
@@ -645,13 +652,16 @@ export function TripWorkspace({
   // Chat refinement: the model returns only changed days; kept stops keep
   // their verified place data, new ones go through the usual auto-link.
   const undoSnapshot = useRef<TripPlan | null>(null);
-  const refine = async (message: string) => {
+  const refine = async (
+    message: string,
+    focus: number | null = day === "all" ? null : day,
+  ) => {
     const before = currentPlan.current;
     setChat((c) => [...c, { id: uid(), role: "user", text: message }]);
     setRefining(true);
     try {
       const result = await invoke<RefineResponse>("refine-itinerary", {
-        ...compactPlan(before, day === "all" ? null : day, message),
+        ...compactPlan(before, focus, message),
         tripId: record.id,
       });
       if (!alive.current) return;
@@ -845,12 +855,21 @@ export function TripWorkspace({
   );
   // How far each stop is from the traveller, once they have shared where
   // they are (null when they are not near the destination yet).
+  const placeOf = (a: Activity) =>
+    details[a.place_id || ""]?.coordinates ||
+    (a.source === "manual" ? a.coordinates : undefined);
   const nearby = (a: Activity) => {
-    const at =
-      details[a.place_id || ""]?.coordinates ||
-      (a.source === "manual" ? a.coordinates : undefined);
+    const at = placeOf(a);
     return me.here && at ? distanceLabel(metresBetween(me.here, at)) : null;
   };
+  // A day whose linked stops sit too far apart for how the trip gets around
+  // (a walking day with 14 km between two stops, or a stop linked to the
+  // wrong city) gets a note and a one-tap request to the chat to tighten it.
+  // Travel days are left alone: they span distances by design.
+  const spreadOf = (d: Day) =>
+    d.activities.some((a) => a.transport)
+      ? null
+      : daySpread(d.activities.map((a) => ({ name: a.name, at: placeOf(a) })));
   const renderActivities = (
     activities: Activity[],
     target: number | "saved",
@@ -1338,6 +1357,42 @@ export function TripWorkspace({
                             <small>{d.activities.length} תחנות בדרך</small>
                           </div>
                         </div>
+                        {(() => {
+                          const spread = spreadOf(d);
+                          const around = plan.metadata.gettingAround;
+                          if (!spread || !tooSpread(spread, around))
+                            return null;
+                          const gap = `${formatDistance(spread.longest)} בין ${spread.from} לבין ${spread.to}`;
+                          return (
+                            <div className="day-spread" role="note">
+                              <span>
+                                {around === "foot"
+                                  ? `היום הזה מפוזר להליכה: ${gap}.`
+                                  : around === "car"
+                                    ? `ביום הזה יש הרבה נהיגה: ${gap}.`
+                                    : `היום הזה מפוזר: ${gap}.`}
+                              </span>
+                              {!locked && (
+                                <button
+                                  type="button"
+                                  disabled={refining}
+                                  onClick={() =>
+                                    void refine(
+                                      tightenRequest(
+                                        d.day_number,
+                                        spread,
+                                        around,
+                                      ),
+                                      d.day_number,
+                                    )
+                                  }
+                                >
+                                  צמצום היום
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {renderActivities(
                           d.activities,
                           d.day_number,
