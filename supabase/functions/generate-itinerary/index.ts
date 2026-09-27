@@ -1,7 +1,7 @@
-import { handler, userId, quota, ApiError } from "../_shared/http.ts";
-import { activity, addDays, callAi, requestData } from "../_shared/ai.ts";
+import { handler, userId, quota } from "../_shared/http.ts";
+import { requestData } from "../_shared/ai.ts";
 import { preferences } from "../_shared/profile.ts";
-import { planRoute, routeBrief } from "../_shared/route.ts";
+import { generateDays } from "../_shared/itinerary.ts";
 Deno.serve((req) =>
   handler(req, async (body) => {
     const id = await userId(req),
@@ -9,49 +9,7 @@ Deno.serve((req) =>
     await quota(id, "ai-generate", 5, 3600);
     const traveler_profile = await preferences(req);
     const tripId = typeof body.tripId === "string" ? body.tripId : undefined;
-    // Past one batch, the route is planned first so every batch follows the
-    // same one (see _shared/route.ts).
-    const route =
-      input.days > 3
-        ? await planRoute(input, { ...input, traveler_profile }, tripId)
-        : null;
-    // Independent batches finish within one provider timeout instead of
-    // accumulating up to ten sequential waits in the Edge runtime.
-    const batches = await Promise.all(
-      Array.from({ length: Math.ceil(input.days / 3) }, async (_, batch) => {
-        const start = batch * 3 + 1;
-        const count = Math.min(3, input.days - start + 1);
-        const result = await callAi(
-          `Return {days:[{day_number,activities:[]}]} with exactly ${count} days numbered ${start} through ${start + count - 1}. Each day has 4-6 activities. Respect the total trip dates and travelers.` +
-            (route ? routeBrief(route, start, count) : ""),
-          { ...input, traveler_profile },
-          tripId,
-        );
-        if (!Array.isArray(result.days) || result.days.length !== count)
-          throw new ApiError(502, "התקבל מסלול חלקי. אפשר לנסות שוב.");
-        const days = [];
-        for (let i = 0; i < count; i++) {
-          const day = result.days[i];
-          if (
-            !Array.isArray(day?.activities) ||
-            day.activities.length < 1 ||
-            day.activities.length > 10
-          )
-            throw new ApiError(502, "התקבל מסלול חלקי. אפשר לנסות שוב.");
-          days.push({
-            day_number: start + i,
-            activities: day.activities.map((v: unknown) =>
-              activity(
-                v,
-                addDays(input.startDate, start + i - 1),
-                input.endDate,
-              ),
-            ),
-          });
-        }
-        return days;
-      }),
-    );
-    return { days: batches.flat() };
+    const { days } = await generateDays(input, traveler_profile, tripId);
+    return { days };
   }),
 );

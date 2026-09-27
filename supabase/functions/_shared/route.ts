@@ -23,8 +23,12 @@ const text = (v: unknown, max = 100) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 const same = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
+// Six moves in ten days (Japan's classic Tokyo–Kyoto–Hiroshima loop) is
+// busy but normal; seven is a change of hotel nearly every day. Stated in
+// the request, so the first route usually fits and no second call is needed.
+const maxMoves = (days: number) => Math.round(days * 0.6);
 const instruction = (days: number, destination: string) =>
-  `Plan only the route now, no activities. The destination is "${destination}". Return {route:[{day_number,base,overnight,transfer,focus}]} with exactly ${days} days numbered 1 through ${days}. base: the city or area where that day's activities happen, in English as on Google Maps. overnight: the city where the travellers sleep that night. transfer: null, or {mode: flight|train|bus|car|ferry|other, from, to} on a day that moves from the previous night's city to a new one. focus: the day's 2-3 main sights, real places in that day's base, in English as on Google Maps; each sight on one day only. Rules: day 1 starts at the destination, since the journey there is outside this plan; each day starts where the previous night was spent; if the destination is a single city (not a country or region), every overnight is that city and other places are day trips; otherwise move forward through the destination, passing back through a hub city only when getting somewhere needs it, never back and forth; never go back to the travellers' home country or through a country outside the destination; make every move one that really exists (a real ferry, train or flight route); keep moves few, at least two nights in a place when the trip allows.`;
+  `Plan only the route now, no activities. The destination is "${destination}". Return {route:[{day_number,base,overnight,transfer,focus}]} with exactly ${days} days numbered 1 through ${days}. base: the city or area where that day's activities happen, in English as on Google Maps. overnight: the city where the travellers sleep that night. transfer: null, or {mode: flight|train|bus|car|ferry|other, from, to} on a day that moves from the previous night's city to a new one. focus: the day's 2-3 main sights, real places in that day's base, in English as on Google Maps; each sight on one day only. Rules: day 1 starts at the destination, since the journey there is outside this plan; each day starts where the previous night was spent; if the destination is a single city (not a country or region), every overnight is that city and other places are day trips; otherwise move forward through the destination, passing back through a hub city only when getting somewhere needs it, never back and forth; never go back to the travellers' home country or through a country outside the destination; make every move one that really exists (a real ferry, train or flight route); keep moves few: at most ${maxMoves(days)} changes of hotel, at least two nights in a place when the trip allows.`;
 /** Reads a planned route; null when it cannot be used at all. */
 export function normaliseRoute(
   value: unknown,
@@ -71,9 +75,7 @@ export function routeProblems(route: RouteDay[]): string[] {
   const problems: string[] = [];
   const sleeps = route.map((d) => d.overnight.toLowerCase());
   const moves = sleeps.filter((c, i) => i > 0 && c !== sleeps[i - 1]).length;
-  // Six moves in ten days (Japan's classic Tokyo–Kyoto–Hiroshima loop) is
-  // busy but normal; seven is a change of hotel nearly every day.
-  const allowed = Math.round(route.length * 0.6);
+  const allowed = maxMoves(route.length);
   if (moves > allowed)
     problems.push(
       `it changes hotel ${moves} times in ${route.length} days, at most ${allowed} allowed; drop places or stay longer`,
