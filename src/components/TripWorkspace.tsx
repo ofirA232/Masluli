@@ -98,8 +98,11 @@ import {
   daySpread,
   distanceLabel,
   formatDistance,
+  isolationLimit,
   localDate,
   metresBetween,
+  middleOf,
+  nearestOf,
   tightenRequest,
   todayCues,
   tooSpread,
@@ -108,6 +111,7 @@ import { beat, cssEase, easeInOut, power2In } from "@/lib/motion";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Activity,
+  Coordinates,
   Day,
   PlaceArea,
   PlaceDetails,
@@ -605,6 +609,73 @@ export function TripWorkspace({
     access,
     queryClient,
   ]);
+  // A name match can still be the wrong place: a same-named café in another
+  // town (a "Pastel's" 65 km up the Hudson on a Manhattan day). Once a day's
+  // stops are placed, an automatic link that sits far from every other stop
+  // of the day is looked up once more near the middle of the day. The best
+  // same-named place close to the others replaces it; if there is none, the
+  // stop is unlinked and marked unverified. Choices the traveller made
+  // themselves are never touched.
+  const doubted = useRef(new Set<string>());
+  useEffect(() => {
+    if (readOnly || generating || day === "all") return;
+    const stops = (plan.days.find((d) => d.day_number === day)?.activities || [])
+      .filter((a) => !a.transport && a.category !== "transport")
+      .map((a) => ({ a, at: placeOf(a) }))
+      .filter((s): s is { a: Activity; at: Coordinates } => !!s.at);
+    if (stops.length < 3) return;
+    for (const stop of stops) {
+      const { a, at } = stop;
+      if (!a.auto_linked || !a.place_id || doubted.current.has(a.id)) continue;
+      const limit = isolationLimit(
+        plan.metadata.gettingAround,
+        a.category === "restaurant",
+      );
+      const others = stops.filter((s) => s !== stop).map((s) => s.at);
+      if (nearestOf(at, others) <= limit) continue;
+      doubted.current.add(a.id);
+      // Whatever happens next, the automatic linker must not put it back.
+      resolved.current.add(a.id);
+      const linked = a.place_id;
+      const middle = middleOf(others);
+      const english = a.image_search_term.trim();
+      pendingPlaces.current++;
+      (async () => {
+        const found = await searchPlaces(
+          english || a.name,
+          plan.metadata.destination,
+          access.tripId,
+          english ? "en" : "he",
+          false,
+          { ...middle, radius: limit },
+        );
+        const near = found.places.filter(
+          (p) => p.coordinates && nearestOf(p.coordinates, others) <= limit,
+        );
+        const better = pickPlace([placeName(english), a.name], near);
+        if (!alive.current) return;
+        edit((prev) => {
+          const latest = allActivities(prev).find((v) => v.id === a.id);
+          if (!latest || latest.place_id !== linked) return prev;
+          return updateActivity(
+            prev,
+            better
+              ? { ...latest, place_id: better.id, auto_linked: true }
+              : { ...latest, place_id: undefined, auto_linked: undefined },
+          );
+        });
+      })()
+        .catch(() => {
+          /* the link stays as it was */
+        })
+        .finally(() => {
+          pendingPlaces.current--;
+          setPlacesTick((t) => t + 1);
+        });
+    }
+    // placeOf reads `details`, which is what fills in as places load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.days, details, day, readOnly, generating, access, edit]);
   // A freshly generated plan stays covered until the first day's stops have
   // been looked up (linked or not), so the traveller sees it with its places.
   // Runs after the linking effect, which counts its lookups synchronously.
@@ -865,11 +936,15 @@ export function TripWorkspace({
   // A day whose linked stops sit too far apart for how the trip gets around
   // (a walking day with 14 km between two stops, or a stop linked to the
   // wrong city) gets a note and a one-tap request to the chat to tighten it.
-  // Travel days are left alone: they span distances by design.
+  // A travel stop splits the day, so the journey itself is not counted.
   const spreadOf = (d: Day) =>
-    d.activities.some((a) => a.transport)
-      ? null
-      : daySpread(d.activities.map((a) => ({ name: a.name, at: placeOf(a) })));
+    daySpread(
+      d.activities.map((a) => ({
+        name: a.name,
+        at: placeOf(a),
+        travel: !!a.transport || a.category === "transport",
+      })),
+    );
   const renderActivities = (
     activities: Activity[],
     target: number | "saved",

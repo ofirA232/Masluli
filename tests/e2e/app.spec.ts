@@ -230,6 +230,71 @@ test("a day too spread for how the trip gets around offers to tighten it", async
   await expect(page.getByRole("button", { name: "מסלולי נהיגה" })).toHaveClass(/active/);
 });
 
+for (const nearby of [true, false])
+  test(`a link far from the rest of its day is ${nearby ? "moved near" : "dropped"}`, async ({
+    page,
+  }) => {
+    const state = await setup(page);
+    const base = initialPlan.days[0].activities[0];
+    const manhattan = [
+      { name: "האמפייר סטייט", at: { lat: 40.7484, lng: -73.9857 } },
+      { name: "הספרייה הציבורית", at: { lat: 40.7532, lng: -73.9822 } },
+      { name: "הייליין", at: { lat: 40.748, lng: -74.0048 } },
+    ];
+    state.row.trip_data.days[0].activities = [
+      ...manhattan.map((m, i) => ({
+        ...base,
+        id: "nyc-" + i,
+        name: m.name,
+        source: "manual",
+        place_id: undefined,
+        coordinates: m.at,
+      })),
+      {
+        ...base,
+        id: "pastels",
+        name: "Pastel's",
+        source: "ai",
+        image_search_term: "Pastel's, Chelsea, New York",
+        place_id: "peekskill",
+        auto_linked: true,
+      },
+    ];
+    const peekskill = { lat: 41.2901, lng: -73.9204 },
+      chelsea = { lat: 40.7465, lng: -74.0014 };
+    let searchedNear: { lat: number; lng: number; radius: number } | null = null;
+    await page.route("**/functions/v1/places**", (route) => {
+      const body = route.request().postDataJSON();
+      if (body.action === "details")
+        return route.fulfill({
+          json: {
+            id: body.placeId,
+            name: "Pastel's",
+            coordinates: body.placeId === "peekskill" ? peekskill : chelsea,
+          },
+        });
+      searchedNear = body.area;
+      return route.fulfill({
+        json: {
+          places: [
+            { id: "peekskill", name: "Pastel's", coordinates: peekskill },
+            ...(nearby ? [{ id: "chelsea", name: "Pastel's", coordinates: chelsea }] : []),
+          ],
+          area: null,
+        },
+      });
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto("/trip/" + tripId);
+    const stop = () =>
+      state.row.trip_data.days[0].activities.find((a) => a.id === "pastels");
+    await expect.poll(() => stop()?.place_id ?? "none").toBe(nearby ? "chelsea" : "none");
+    // The second look was biased to the middle of the Manhattan stops.
+    expect(Math.abs(searchedNear!.lat - 40.75)).toBeLessThan(0.02);
+    if (!nearby)
+      await expect(page.locator("#activity-pastels .verification-note")).toBeVisible();
+  });
+
 test("failed saves preserve the draft and retry successfully", async ({
   page,
 }) => {

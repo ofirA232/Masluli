@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   daySpread,
   distanceLabel,
+  isolationLimit,
+  middleOf,
+  nearestOf,
   tightenRequest,
   tooSpread,
   localDate,
@@ -120,5 +123,47 @@ describe("daySpread", () => {
       "יום 2 מפוזר מדי להליכה (14 ק״מ בין Senso-ji לבין Tsukiji). תבנה אותו מחדש סביב אזור אחד, עם תחנות במרחק הליכה או נסיעה קצרה בתחבורה ציבורית זו מזו.",
     );
     expect(tightenRequest(3, s, "car")).toContain("יותר מדי נהיגה");
+  });
+});
+
+describe("travel splits a day", () => {
+  const colosseum = { lat: 41.8902, lng: 12.4922 },
+    pantheon = { lat: 41.8986, lng: 12.4769 },
+    uffizi = { lat: 43.7678, lng: 11.2553 },
+    duomo = { lat: 43.7731, lng: 11.256 };
+  it("does not count the journey between the two sides", () => {
+    const s = daySpread([
+      { name: "Colosseum", at: colosseum },
+      { name: "Pantheon", at: pantheon },
+      { name: "Train to Florence", travel: true },
+      { name: "Uffizi", at: uffizi },
+      { name: "Duomo", at: duomo },
+    ])!;
+    expect(s.longest).toBeLessThan(2_000);
+  });
+});
+
+describe("a lone far stop", () => {
+  // Manhattan stops, and a same-named café in Peekskill, 65 km north.
+  const manhattan = [
+    { lat: 40.7484, lng: -73.9857 },
+    { lat: 40.7527, lng: -73.9772 },
+    { lat: 40.7411, lng: -74.0048 },
+  ];
+  const peekskill = { lat: 41.2901, lng: -73.9204 };
+  it("holds a meal closer than a sight", () => {
+    expect(isolationLimit("foot", true)).toBe(2_000);
+    expect(isolationLimit(null, true)).toBe(5_000);
+    expect(isolationLimit("car", true)).toBe(15_000);
+    expect(isolationLimit("car")).toBe(25_000);
+  });
+  it("is farther from every other stop than the day allows", () => {
+    expect(nearestOf(peekskill, manhattan)).toBeGreaterThan(isolationLimit(null));
+    expect(nearestOf(peekskill, manhattan)).toBeGreaterThan(isolationLimit("car"));
+    expect(nearestOf(manhattan[0], manhattan.slice(1))).toBeLessThan(isolationLimit("foot"));
+  });
+  it("is left out of the middle of the day", () => {
+    const mid = middleOf([...manhattan, peekskill]);
+    expect(nearestOf(mid, manhattan)).toBeLessThan(5_000);
   });
 });
