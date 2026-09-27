@@ -183,11 +183,20 @@ export async function googleFetch(url: string, init: RequestInit = {}) {
     },
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok)
+  if (!response.ok) {
+    // Google explains a rejected request in the body (e.g. INVALID_ARGUMENT
+    // and which field); without it a 502 in the logs says nothing.
+    console.error(
+      "google_request_failed",
+      response.status,
+      new URL(url).pathname,
+      (await response.text()).slice(0, 500),
+    );
     throw new ApiError(
       response.status === 429 ? 429 : 502,
       "שירות המפות אינו זמין כרגע",
     );
+  }
   return response.json();
 }
 export async function authorizePlaces(
