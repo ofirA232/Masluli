@@ -1,12 +1,20 @@
 import { handler, userId, quota, ApiError } from "../_shared/http.ts";
 import { activity, addDays, callAi, requestData } from "../_shared/ai.ts";
 import { preferences } from "../_shared/profile.ts";
+import { planRoute, routeBrief } from "../_shared/route.ts";
 Deno.serve((req) =>
   handler(req, async (body) => {
     const id = await userId(req),
       input = requestData(body);
     await quota(id, "ai-generate", 5, 3600);
     const traveler_profile = await preferences(req);
+    const tripId = typeof body.tripId === "string" ? body.tripId : undefined;
+    // Past one batch, the route is planned first so every batch follows the
+    // same one (see _shared/route.ts).
+    const route =
+      input.days > 3
+        ? await planRoute(input, { ...input, traveler_profile }, tripId)
+        : null;
     // Independent batches finish within one provider timeout instead of
     // accumulating up to ten sequential waits in the Edge runtime.
     const batches = await Promise.all(
@@ -14,9 +22,10 @@ Deno.serve((req) =>
         const start = batch * 3 + 1;
         const count = Math.min(3, input.days - start + 1);
         const result = await callAi(
-          `Return {days:[{day_number,activities:[]}]} with exactly ${count} days numbered ${start} through ${start + count - 1}. Each day has 4-6 activities. Respect the total trip dates and travelers.`,
+          `Return {days:[{day_number,activities:[]}]} with exactly ${count} days numbered ${start} through ${start + count - 1}. Each day has 4-6 activities. Respect the total trip dates and travelers.` +
+            (route ? routeBrief(route, start, count) : ""),
           { ...input, traveler_profile },
-          typeof body.tripId === "string" ? body.tripId : undefined,
+          tripId,
         );
         if (!Array.isArray(result.days) || result.days.length !== count)
           throw new ApiError(502, "התקבל מסלול חלקי. אפשר לנסות שוב.");
