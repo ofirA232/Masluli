@@ -3,7 +3,9 @@ import {
   distance,
   insideArea,
   outlierStops,
+  nameScore,
   pickPlace,
+  placeName,
   similarity,
 } from "@/lib/places-match";
 
@@ -39,6 +41,22 @@ describe("pickPlace", () => {
   });
   it("trusts the top result in lenient mode", () => {
     expect(pickPlace("Oriental Pearl Tower", places, true)?.id).toBe("a");
+  });
+  it("matches either of a stop's names", () => {
+    const tower = [
+      { id: "e", name: "מגדל אייפל" },
+      { id: "l", name: "Louvre Museum" },
+    ];
+    expect(pickPlace(["Eiffel Tower", "מגדל אייפל"], tower)?.id).toBe("e");
+    expect(pickPlace(["Louvre Museum", "מוזיאון הלובר"], tower)?.id).toBe("l");
+    expect(nameScore(["Eiffel Tower", ""], "Louvre Museum")).toBeLessThan(0.5);
+  });
+  it("folds accents when comparing names", () => {
+    const temple = [
+      { id: "s", name: "Sensō-ji" },
+      { id: "m", name: "Meiji Jingu" },
+    ];
+    expect(pickPlace("Senso-ji", temple)?.id).toBe("s");
   });
   it("ignores unnamed results", () => {
     expect(pickPlace("x", [{ id: "n" } as { id: string; name?: string }])).toBeNull();
@@ -107,5 +125,12 @@ describe("outlierStops", () => {
   it("says nothing when there is too little to compare", () => {
     expect(outlierStops(tokyoDay.slice(0, 2)).size).toBe(0);
     expect(outlierStops([{ id: "x" }, { id: "y" }, { id: "z" }]).size).toBe(0);
+  });
+});
+
+describe("placeName", () => {
+  it("keeps the name and drops the city", () => {
+    expect(placeName("Senso-ji, Tokyo")).toBe("Senso-ji");
+    expect(placeName("Louvre Museum")).toBe("Louvre Museum");
   });
 });

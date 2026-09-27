@@ -1,8 +1,11 @@
 // Name matching between AI suggestions and Google Places results.
 // Coordinates always come from the matched place, never from the AI.
+// Accents fold away ("Sensō-ji" matches "Senso-ji"), as do case,
+// punctuation and spacing.
 const clean = (v: string) =>
   v
-    .normalize("NFKC")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, "");
 const bigrams = (s: string) => {
@@ -30,20 +33,36 @@ export function similarity(a: string, b: string): number {
 }
 export const MATCH_THRESHOLD = 0.5;
 /**
+ * The place's own name from an AI search term written as "Name, City": the
+ * city helps the search find it, but only the name is compared.
+ */
+export const placeName = (term: string) => term.split(",")[0].trim();
+/**
+ * Best similarity of a place's name to any of the names a stop goes by (its
+ * English name and its Hebrew title): Google may answer in either.
+ */
+export const nameScore = (query: string | string[], name: string) =>
+  Math.max(
+    0,
+    ...(Array.isArray(query) ? query : [query])
+      .filter(Boolean)
+      .map((q) => similarity(q, name)),
+  );
+/**
  * Choose the place an AI suggestion refers to.
  * Strict mode links a clearly similar name, or the only result for the query.
  * Lenient mode (used with the AI's specific English search term) trusts the
  * top-ranked result; such links are labelled in the UI and easy to replace.
  */
 export function pickPlace<T extends { name?: string }>(
-  query: string,
+  query: string | string[],
   places: T[],
   lenient = false,
 ): T | null {
   const named = places.filter((p) => p.name);
   if (!named.length) return null;
   const best = named
-    .map((p) => ({ p, score: similarity(query, p.name!) }))
+    .map((p) => ({ p, score: nameScore(query, p.name!) }))
     .sort((a, b) => b.score - a.score)[0];
   if (best.score >= MATCH_THRESHOLD) return best.p;
   if (named.length === 1 || lenient) return named[0];

@@ -1,6 +1,7 @@
 import type {
   BudgetLevel,
   FoodStyle,
+  GettingAround,
   Mobility,
   Pace,
   TravelPreferences,
@@ -35,6 +36,11 @@ export const mobilityOptions: { value: Mobility; label: string }[] = [
   { value: "light", label: "הליכות קצרות" },
   { value: "accessible", label: "נגישות מלאה" },
 ];
+export const gettingAroundOptions: { value: GettingAround; label: string }[] = [
+  { value: "foot", label: "ברגל ובתחבורה ציבורית" },
+  { value: "car", label: "ברכב" },
+  { value: "mixed", label: "גם וגם" },
+];
 export const foodOptions: { value: FoodStyle; label: string }[] = [
   { value: "street", label: "אוכל רחוב" },
   { value: "local", label: "מקומי ואותנטי" },
@@ -65,6 +71,7 @@ export const emptyPreferences = (): TravelPreferences => ({
   budget: null,
   kids: false,
   mobility: null,
+  getting_around: null,
   interests: [],
   pet_peeves: "",
 });
@@ -82,6 +89,7 @@ export function normalizePreferences(value: unknown): TravelPreferences {
     budget: oneOf(budgetOptions, p.budget),
     kids: p.kids === true,
     mobility: oneOf(mobilityOptions, p.mobility),
+    getting_around: oneOf(gettingAroundOptions, p.getting_around),
     interests: strings(p.interests, 10, 50),
     pet_peeves:
       typeof p.pet_peeves === "string" ? p.pet_peeves.trim().slice(0, 300) : "",
@@ -94,6 +102,7 @@ export const hasPreferences = (p: TravelPreferences) =>
       p.budget ||
       p.kids ||
       p.mobility ||
+      p.getting_around ||
       p.interests.length ||
       p.pet_peeves,
   );

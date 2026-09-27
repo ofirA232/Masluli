@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { setDates, setup, tripId } from "./fixtures";
+import { initialPlan, setDates, setup, tripId } from "./fixtures";
 test("homepage and mobile layout remain usable", async ({ page }) => {
   await setup(page, false);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -114,6 +114,122 @@ test("AI generation renders before optional provider enrichment", async ({
     .poll(() => state.row.trip_data.days[0].activities[0]?.source)
     .toBe("ai");
 });
+test("AI stops link through the free search, paying only for a miss", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const stop = (name: string, term: string, id: string) => ({
+    ...initialPlan.days[0].activities[0],
+    id,
+    name,
+    image_search_term: term,
+    source: "ai",
+  });
+  await page.route("**/functions/v1/generate-itinerary**", (route) =>
+    route.fulfill({
+      json: {
+        days: [
+          {
+            day_number: 1,
+            activities: [
+              stop("מוזיאון הלובר", "Louvre Museum, Paris", "ai-louvre"),
+              stop("מגדל אייפל", "Eiffel Tower, Paris", "ai-eiffel"),
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const calls = { ids: 0, named: 0 };
+  const paris = { lat: 48.86, lng: 2.33 };
+  await page.route("**/functions/v1/places**", (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action === "details")
+      return route.fulfill({
+        json: {
+          id: body.placeId,
+          // The free search's top hit for the tower is a café nearby.
+          name: body.placeId === "louvre" ? "Louvre Museum" : "Café Constant",
+          coordinates: paris,
+        },
+      });
+    if (body.idsOnly) {
+      calls.ids++;
+      return route.fulfill({
+        json: {
+          places: [{ id: body.query.startsWith("Louvre") ? "louvre" : "cafe" }],
+          area: null,
+        },
+      });
+    }
+    calls.named++;
+    return route.fulfill({
+      json: {
+        places: [
+          { id: "cafe", name: "Café Constant", coordinates: paris },
+          { id: "eiffel", name: "Eiffel Tower", coordinates: paris },
+        ],
+        area: null,
+      },
+    });
+  });
+  await page.goto("/trip/new");
+  await page.locator("[name=destination]").fill("פריז");
+  await setDates(page, "2027-10-04", "2027-10-04");
+  await page.getByRole("button", { name: "יוצרים את הטיול שלי" }).click();
+  await expect
+    .poll(() =>
+      state.row.trip_data.days[0].activities.map((a) => a.place_id).join(),
+    )
+    .toBe("louvre,eiffel");
+  expect(calls).toEqual({ ids: 2, named: 1 });
+});
+
+test("a day too spread for how the trip gets around offers to tighten it", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const rome = [
+    { name: "הקולוסיאום", at: { lat: 41.8902, lng: 12.4922 } },
+    { name: "וילה ד'אסטה", at: { lat: 41.9636, lng: 12.7982 } },
+    { name: "מזרקת טרווי", at: { lat: 41.9009, lng: 12.4833 } },
+  ];
+  const base = initialPlan.days[0].activities[0];
+  state.row.trip_data.metadata.gettingAround = "foot";
+  state.row.trip_data.days[0].activities = rome.map((r, i) => ({
+    ...base,
+    id: "rome-" + i,
+    name: r.name,
+    source: "manual",
+    place_id: undefined,
+    coordinates: r.at,
+  }));
+  let asked: { message: string; focus_day: number | null } | null = null;
+  await page.route("**/functions/v1/refine-itinerary**", (route) => {
+    asked = route.request().postDataJSON();
+    return route.fulfill({ json: { days: [], summary: "" } });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/trip/" + tripId);
+  const note = page.locator(".day-spread").first();
+  await expect(note).toContainText("היום הזה מפוזר להליכה");
+  await expect(note).toContainText("וילה ד'אסטה");
+  await page
+    .locator(".itinerary-day")
+    .first()
+    .screenshot({ path: "artifacts/day-spread.png" });
+  await note.getByRole("button", { name: "צמצום היום" }).click();
+  await expect.poll(() => asked?.focus_day).toBe(1);
+  expect(asked!.message).toContain("יום 1 מפוזר מדי להליכה");
+
+  // The same day by car is fine, and the map starts on driving legs.
+  state.row.trip_data.metadata.gettingAround = "car";
+  await page.reload();
+  await expect(page.locator(".itinerary-day").first()).toBeVisible();
+  await expect(page.locator(".day-spread")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "מסלולי נהיגה" })).toHaveClass(/active/);
+});
+
 test("failed saves preserve the draft and retry successfully", async ({
   page,
 }) => {

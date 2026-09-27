@@ -246,7 +246,9 @@ export function ActivityCard({
               <button className="activity-title" onClick={onSelect}>
                 {p?.name || a.name}
               </button>
-              {p?.rating !== undefined && (
+              {/* Ratings only where they help choose: places to stay. */}
+              {(kind === "lodging" || a.category === "accommodation") &&
+                p?.rating !== undefined && (
                 <span className="place-rating">
                   <Star size={12} fill="currentColor" />
                   {p.rating}

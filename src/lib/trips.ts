@@ -13,6 +13,7 @@ import type {
   TransportMode,
   Traveler,
   TripPlan,
+  TripMetadata,
 } from "@/types/itinerary";
 
 export const categories: Record<Category, string> = {
@@ -89,6 +90,7 @@ export const requestSchema = z
         "התקציב חייב להיות סכום חיובי",
       ),
     interests: z.array(z.string()).max(10).optional(),
+    gettingAround: z.enum(["foot", "car", "mixed"]).optional(),
   })
   .refine(
     (v) =>
@@ -109,6 +111,7 @@ export function createPlan(request: ItineraryRequest): TripPlan {
       travelersList: defaultTravelers(input.travelers),
       interests: input.interests || [],
       targetBudget: input.budget ? Number(input.budget) : null,
+      gettingAround: input.gettingAround ?? null,
     },
     days: Array.from(
       { length: dayCount(input.startDate, input.endDate) },
@@ -432,6 +435,9 @@ export function normalizePlan(value: unknown, destination = ""): TripPlan {
         : [],
       targetBudget: finite(meta.targetBudget)
         ? Number(meta.targetBudget)
+        : null,
+      gettingAround: ["foot", "car", "mixed"].includes(str(meta.gettingAround))
+        ? (str(meta.gettingAround) as TripMetadata["gettingAround"])
         : null,
     },
     days: days.length ? days : [{ day_number: 1, activities: [] }],

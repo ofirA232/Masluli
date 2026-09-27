@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  daySpread,
   distanceLabel,
+  tightenRequest,
+  tooSpread,
   localDate,
   metresBetween,
   timeRange,
@@ -70,5 +73,52 @@ describe("todayCues", () => {
   it("treats a stop without an end as an hour long", () => {
     expect(todayCues(stops, 13 * 60 + 30)).toEqual({ d: "now" });
     expect(todayCues(stops, 14 * 60 + 5)).toEqual({});
+  });
+});
+
+describe("daySpread", () => {
+  // Rome: Colosseum, Pantheon and Trevi are a walk apart; Tivoli is 30 km out.
+  const colosseum = { lat: 41.8902, lng: 12.4922 },
+    pantheon = { lat: 41.8986, lng: 12.4769 },
+    trevi = { lat: 41.9009, lng: 12.4833 },
+    tivoli = { lat: 41.9636, lng: 12.7982 };
+  it("needs three placed stops", () => {
+    expect(daySpread([{ name: "a", at: colosseum }, { name: "b" }, { name: "c", at: trevi }])).toBeNull();
+  });
+  it("finds the longest hop and the whole way", () => {
+    const s = daySpread([
+      { name: "Colosseum", at: colosseum },
+      { name: "Pantheon", at: pantheon },
+      { name: "Villa d'Este", at: tivoli },
+      { name: "Trevi", at: trevi },
+    ])!;
+    expect(s.from).toBe("Pantheon");
+    expect(s.to).toBe("Villa d'Este");
+    expect(s.longest).toBeGreaterThan(25_000);
+    expect(s.total).toBeGreaterThan(2 * s.longest - 5_000);
+  });
+  it("judges it by how the travellers get around", () => {
+    const walkable = daySpread([
+      { name: "Colosseum", at: colosseum },
+      { name: "Pantheon", at: pantheon },
+      { name: "Trevi", at: trevi },
+    ])!;
+    const tivoliDay = daySpread([
+      { name: "Colosseum", at: colosseum },
+      { name: "Villa d'Este", at: tivoli },
+      { name: "Trevi", at: trevi },
+    ])!;
+    expect(tooSpread(walkable, "foot")).toBe(false);
+    expect(tooSpread(tivoliDay, "foot")).toBe(true);
+    expect(tooSpread(tivoliDay, "mixed")).toBe(false);
+    expect(tooSpread(tivoliDay, "car")).toBe(false);
+    expect(tooSpread(tivoliDay, null)).toBe(false);
+  });
+  it("words the request for the chat", () => {
+    const s = { longest: 14_200, total: 20_000, from: "Senso-ji", to: "Tsukiji" };
+    expect(tightenRequest(2, s, "foot")).toBe(
+      "יום 2 מפוזר מדי להליכה (14 ק״מ בין Senso-ji לבין Tsukiji). תבנה אותו מחדש סביב אזור אחד, עם תחנות במרחק הליכה או נסיעה קצרה בתחבורה ציבורית זו מזו.",
+    );
+    expect(tightenRequest(3, s, "car")).toContain("יותר מדי נהיגה");
   });
 });

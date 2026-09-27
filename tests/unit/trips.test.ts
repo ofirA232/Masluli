@@ -168,3 +168,21 @@ describe("editing and budget", () => {
     expect(budgetTotals(p).max).toBe(0);
   });
 });
+
+describe("getting around", () => {
+  it("keeps the trip's choice from the form", () => {
+    expect(createPlan({ ...request, gettingAround: "foot" }).metadata.gettingAround).toBe("foot");
+    expect(createPlan(request).metadata.gettingAround).toBeNull();
+  });
+  it("reads it back from a stored trip, and older trips have none", () => {
+    const stored = createPlan({ ...request, gettingAround: "car" });
+    expect(normalizePlan(stored).metadata.gettingAround).toBe("car");
+    const older = { ...stored, metadata: { ...stored.metadata, gettingAround: undefined } };
+    expect(normalizePlan(older).metadata.gettingAround).toBeNull();
+    const junk = { ...stored, metadata: { ...stored.metadata, gettingAround: "teleport" } };
+    expect(normalizePlan(junk).metadata.gettingAround).toBeNull();
+  });
+  it("refuses an unknown value in the request", () => {
+    expect(requestSchema.safeParse({ ...request, gettingAround: "boat" }).success).toBe(false);
+  });
+});

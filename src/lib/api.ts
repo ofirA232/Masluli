@@ -38,6 +38,8 @@ export async function searchPlaces(
   destination: string,
   tripId?: string,
   language: "he" | "en" = "he",
+  /** Google's free tier: place IDs only, no names or coordinates. */
+  idsOnly = false,
 ): Promise<SearchResult> {
   const key = destination.trim().toLowerCase();
   const pending = areas.get(key);
@@ -48,6 +50,7 @@ export async function searchPlaces(
     destination,
     tripId,
     language,
+    ...(idsOnly ? { idsOnly: true } : {}),
     ...(area ? { area } : {}),
   });
   if (!pending)

@@ -11,6 +11,7 @@ describe("normalizePreferences", () => {
       pace: "packed",
       budget: "gold",
       mobility: "light",
+      getting_around: "car",
       kids: "yes",
       food: ["kosher", "pizza", "kosher", 3],
       interests: ["אוכל", "", "  טבע  ", 7, "x".repeat(80)],
@@ -21,12 +22,16 @@ describe("normalizePreferences", () => {
       pace: "packed",
       budget: null,
       mobility: "light",
+      getting_around: "car",
       kids: false,
       food: ["kosher"],
       interests: ["אוכל", "טבע", "x".repeat(50)],
       pet_peeves: "תורים " + "!".repeat(294),
     });
     expect("admin" in p).toBe(false);
+  });
+  it("drops an unknown way of getting around", () => {
+    expect(normalizePreferences({ getting_around: "jetpack" }).getting_around).toBeNull();
   });
   it("caps list lengths", () => {
     const p = normalizePreferences({

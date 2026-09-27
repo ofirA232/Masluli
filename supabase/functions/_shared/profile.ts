@@ -4,6 +4,7 @@ import { client } from "./http.ts";
 const paces = ["relaxed", "balanced", "packed"];
 const budgets = ["budget", "moderate", "luxury"];
 const mobilities = ["full", "light", "accessible"];
+export const gettingAround = ["foot", "car", "mixed"];
 const foods = ["street", "local", "fine", "vegetarian", "vegan", "kosher"];
 export interface TravelPreferences {
   pace: string | null;
@@ -11,6 +12,7 @@ export interface TravelPreferences {
   budget: string | null;
   kids: boolean;
   mobility: string | null;
+  getting_around: string | null;
   interests: string[];
   pet_peeves: string;
 }
@@ -38,6 +40,7 @@ export function normalizePreferences(value: unknown): TravelPreferences {
     budget: oneOf(budgets, p.budget),
     kids: p.kids === true,
     mobility: oneOf(mobilities, p.mobility),
+    getting_around: oneOf(gettingAround, p.getting_around),
     interests: strings(p.interests, 10, 50),
     pet_peeves:
       typeof p.pet_peeves === "string" ? p.pet_peeves.trim().slice(0, 300) : "",
@@ -50,6 +53,7 @@ export const hasPreferences = (p: TravelPreferences) =>
       p.budget ||
       p.kids ||
       p.mobility ||
+      p.getting_around ||
       p.interests.length ||
       p.pet_peeves,
   );

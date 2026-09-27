@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { requestSchema } from "@/lib/trips";
 import { invoke } from "@/lib/api";
 import type { ItineraryRequest } from "@/types/itinerary";
-import { interestOptions as interests } from "@/lib/preferences";
+import {
+  gettingAroundOptions,
+  interestOptions as interests,
+} from "@/lib/preferences";
+import { useTravelerProfile } from "@/hooks/useTravelerProfile";
+import { Choices } from "./Choices";
 import { TripDates } from "./TripDates";
 import { TravelersField } from "./TravelersField";
 export const requestKey = "planatrip:new-trip";
@@ -32,6 +37,7 @@ export function TripForm({
         travelers: stored?.travelers || 2,
         budget: stored?.budget || "",
         interests: stored?.interests || [],
+        gettingAround: stored?.gettingAround,
       };
     } catch {
       return {
@@ -44,6 +50,14 @@ export function TripForm({
       };
     }
   });
+  // Starts from the traveller's usual way of getting around, if they told us;
+  // an answer already given here is never overwritten.
+  const profile = useTravelerProfile();
+  const usual = profile.loaded ? profile.preferences.getting_around : null;
+  useEffect(() => {
+    if (usual)
+      setForm((f) => (f.gettingAround ? f : { ...f, gettingAround: usual }));
+  }, [usual]);
   const [error, setError] = useState(""),
     [ai, setAi] = useState(() => {
       try {
@@ -262,6 +276,15 @@ export function TripForm({
               ))}
             </div>
           </div>
+          <Choices
+            label="איך מתניידים?"
+            hint="ככה נדע כמה לפזר כל יום: בהליכה הכל קרוב, ברכב אפשר רחוק יותר."
+            options={gettingAroundOptions}
+            value={form.gettingAround ?? null}
+            onChange={(gettingAround) =>
+              setForm({ ...form, gettingAround: gettingAround ?? undefined })
+            }
+          />
           <fieldset className="creation-mode">
             <legend>איך מתחילים?</legend>
             <label className={ai ? "selected" : ""}>

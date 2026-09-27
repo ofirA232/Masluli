@@ -1922,6 +1922,33 @@
   font-size: 11px;
   color: var(--ink-70);
 }
+/* A day too spread out for how the trip gets around. */
+.day-spread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #fff4e5;
+  color: #7a4a0e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.day-spread button {
+  margin-inline-start: auto;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgb(13 18 18 / 0.08);
+}
+.day-spread button:disabled {
+  opacity: 0.6;
+}
 .day-drop {
   /* Anchors cards that pop out of the list while they fade away. */
   position: relative;
@@ -3748,20 +3775,51 @@ button.user-avatar {
 .profile-dialog {
   max-width: 560px;
 }
-.profile-form .choice-group {
+.choice-group {
   margin: 14px 0;
 }
-.profile-form .choice-group h3 {
+.choice-group h3 {
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 8px;
 }
-.profile-form .choice-group > div {
+.choice-group p {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--ink-70);
+}
+/* In the trip form the group reads like the interests above it. */
+.trip-form .choice-group {
+  margin: 28px 0;
+}
+.trip-form .choice-group h3 {
+  font-size: 17px;
+  margin-bottom: 0;
+}
+.trip-form .choice-group p {
+  margin: 5px 0 0;
+  font-size: 14px;
+}
+.trip-form .choice-group > div {
+  margin-top: 14px;
+}
+.trip-form .choice-group button {
+  font-size: 14px;
+  padding: 8px 16px;
+  border: 0;
+  background: var(--mint-soft);
+  color: var(--ink);
+}
+.trip-form .choice-group button.selected {
+  background: var(--slate);
+  color: #fff;
+}
+.choice-group > div {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-.profile-form .choice-group button {
+.choice-group button {
   font-size: 12px;
   padding: 7px 15px;
   border: 1px solid var(--line);
@@ -3769,7 +3827,7 @@ button.user-avatar {
   color: var(--ink-70);
   background: #fff;
 }
-.profile-form .choice-group button.selected {
+.choice-group button.selected {
   border-color: var(--slate);
   background: var(--mint);
   color: var(--slate);

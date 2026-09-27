@@ -1,4 +1,5 @@
 import { ApiError, textInput } from "./http.ts";
+import { gettingAround } from "./profile.ts";
 import { activity, categories } from "./ai.ts";
 // Editing protocol: the model sees a compact plan with stable ids and returns
 // only the days it changed. A kept stop is {id}; a new stop is a full activity
@@ -47,6 +48,9 @@ export function refineInput(body: Record<string, unknown>) {
           .map((v) => str(v, 50))
           .filter(Boolean)
       : [],
+    getting_around: gettingAround.includes(str(m.gettingAround, 10))
+      ? str(m.gettingAround, 10)
+      : null,
     targetBudget:
       typeof m.targetBudget === "number" &&
       Number.isFinite(m.targetBudget) &&

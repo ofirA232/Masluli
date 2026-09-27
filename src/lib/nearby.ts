@@ -1,5 +1,6 @@
-// Where the traveller stands relative to their stops, and which stop is on
-// now. Everything here runs in the browser on the position the device gives;
+import type { GettingAround } from "@/types/profile";
+// Where the traveller stands relative to their stops, which stop is on now,
+// and whether a day's stops fit how the travellers get around. Everything here runs in the browser on the position the device gives;
 // nothing is sent anywhere.
 export interface LatLng {
   lat: number;
@@ -23,13 +24,15 @@ const USEFUL_RANGE = 50_000;
 const WALK_DETOUR = 1.3,
   WALK_METRES_PER_MINUTE = 80,
   WALKABLE = 2_000;
+/** "450 מ׳", "3.2 ק״מ", "24 ק״מ". */
+export const formatDistance = (metres: number) =>
+  metres < 1_000
+    ? `${Math.max(10, Math.round(metres / 10) * 10)} מ׳`
+    : `${(metres / 1_000).toFixed(metres < 10_000 ? 1 : 0)} ק״מ`;
 /** "450 מ׳ ממך · כ־7 דק׳ הליכה", or null when too far to be useful. */
 export function distanceLabel(metres: number): string | null {
   if (!Number.isFinite(metres) || metres > USEFUL_RANGE) return null;
-  const distance =
-    metres < 1_000
-      ? `${Math.max(10, Math.round(metres / 10) * 10)} מ׳`
-      : `${(metres / 1_000).toFixed(metres < 10_000 ? 1 : 0)} ק״מ`;
+  const distance = formatDistance(metres);
   if (metres > WALKABLE) return `${distance} ממך`;
   const minutes = Math.max(
     1,
@@ -77,4 +80,58 @@ export function todayCues(
     }
   }
   return cues;
+}
+/** A day's stops in order: its longest hop between two, and the whole way. */
+export interface Spread {
+  longest: number;
+  total: number;
+  from: string;
+  to: string;
+}
+/**
+ * How spread out a day is, from the real coordinates of its stops (straight
+ * lines, in visiting order). Needs at least three placed stops to say.
+ */
+export function daySpread(
+  stops: { name: string; at?: LatLng | null }[],
+): Spread | null {
+  const placed = stops.filter((s): s is { name: string; at: LatLng } => !!s.at);
+  if (placed.length < 3) return null;
+  const spread: Spread = { longest: 0, total: 0, from: "", to: "" };
+  for (let i = 1; i < placed.length; i++) {
+    const m = metresBetween(placed[i - 1].at, placed[i].at);
+    spread.total += m;
+    if (m > spread.longest)
+      Object.assign(spread, {
+        longest: m,
+        from: placed[i - 1].name,
+        to: placed[i].name,
+      });
+  }
+  return spread;
+}
+// What still fits a day, by how the travellers get around. On foot a hop is
+// a walk or a few stops (3 km); mixed allows a day trip out and back; by car
+// a hop is up to about 1.5 hours on the road.
+const LIMITS: Record<GettingAround, { hop: number; total: number }> = {
+  foot: { hop: 3_000, total: 12_000 },
+  mixed: { hop: 40_000, total: 90_000 },
+  car: { hop: 120_000, total: 250_000 },
+};
+export function tooSpread(spread: Spread, mode: GettingAround | null) {
+  const limit = LIMITS[mode || "mixed"];
+  return spread.longest > limit.hop || spread.total > limit.total;
+}
+/** The request the chat gets when the traveller asks to tighten a day. */
+export function tightenRequest(
+  day: number,
+  spread: Spread,
+  mode: GettingAround | null,
+) {
+  const where = `${formatDistance(spread.longest)} בין ${spread.from} לבין ${spread.to}`;
+  if (mode === "foot")
+    return `יום ${day} מפוזר מדי להליכה (${where}). תבנה אותו מחדש סביב אזור אחד, עם תחנות במרחק הליכה או נסיעה קצרה בתחבורה ציבורית זו מזו.`;
+  if (mode === "car")
+    return `ביום ${day} יש יותר מדי נהיגה (${where}). תצמצם את הנסיעות לאזור אחד.`;
+  return `יום ${day} מפוזר מדי (${where}). תצמצם אותו לאזור אחד, או תהפוך את החלק הרחוק לטיול יום משלו.`;
 }

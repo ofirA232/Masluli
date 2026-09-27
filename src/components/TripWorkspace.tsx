@@ -25,7 +25,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bookmark,
@@ -79,7 +79,14 @@ import {
   uid,
 } from "@/lib/trips";
 import { getPlace, getRoute, invoke, searchPlaces } from "@/lib/api";
-import { insideArea, outlierStops, pickPlace } from "@/lib/places-match";
+import {
+  insideArea,
+  MATCH_THRESHOLD,
+  nameScore,
+  outlierStops,
+  pickPlace,
+  placeName,
+} from "@/lib/places-match";
 import { LodgingGhost } from "./StopBodies";
 import { RefinePanel, type ChatMessage } from "./RefinePanel";
 import { compactPlan, mergeRefinement } from "@/lib/refine";
@@ -88,10 +95,14 @@ import { destinationImage } from "@/lib/destinations";
 import { usePlanCover } from "@/components/PlanLoading";
 import { useLiveLocation } from "@/hooks/useLiveLocation";
 import {
+  daySpread,
   distanceLabel,
+  formatDistance,
   localDate,
   metresBetween,
+  tightenRequest,
   todayCues,
+  tooSpread,
 } from "@/lib/nearby";
 import { beat, cssEase, easeInOut, power2In } from "@/lib/motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -170,7 +181,10 @@ export function TripWorkspace({
     [chat, setChat] = useState<ChatMessage[]>([]),
     [refining, setRefining] = useState(false),
     [sharing, setSharing] = useState(false),
-    [mode, setMode] = useState<"WALK" | "DRIVE">("WALK"),
+    // The map's legs start in the trip's own way of getting around.
+    [mode, setMode] = useState<"WALK" | "DRIVE">(
+      plan.metadata.gettingAround === "car" ? "DRIVE" : "WALK",
+    ),
     [details, setDetails] = useState<Record<string, PlaceDetails>>({});
   // True from the first time the map panel is visible, and never false again.
   const [mapMounted, setMapMounted] = useState(false);
@@ -280,6 +294,7 @@ export function TripWorkspace({
       cachedPlace,
     }));
   }, [mapLists]);
+  const queryClient = useQueryClient();
   const prefetched = useQueries({
     queries: linked.map(({ placeId, cachedPlace }) => ({
       queryKey: ["place", access.tripId, access.shareToken, placeId],
@@ -445,6 +460,7 @@ export function TripWorkspace({
         endDate: original.metadata.endDate,
         travelers: original.metadata.travelers,
         interests: original.metadata.interests,
+        gettingAround: original.metadata.gettingAround ?? undefined,
         budget:
           original.metadata.targetBudget === null
             ? undefined
@@ -505,32 +521,55 @@ export function TripWorkspace({
       resolved.current.add(a.id);
       pendingPlaces.current++;
       (async () => {
-        // The AI's English name is how Google indexes most places, so it is
-        // searched first and usually links the stop in one paid search. The
-        // Hebrew title is the fallback, not the first attempt: searching it
-        // first cost about two searches per linked stop.
+        // The AI's search term reads "Name, City" in English, which is how
+        // Google indexes most places; the city steers the search. A stop is
+        // linked only to a result whose name matches its English name or its
+        // Hebrew title: trusting whatever ranked first linked invented or
+        // misnamed places, and such a stop now stays marked unverified.
+        //  1. Free: an IDs-only search, and the top hit checked against the
+        //     details the card fetches for it anyway (cached for the card).
+        //  2. Only when that is not the place: one paid search that returns
+        //     names, compared against both of the stop's names.
         const english = a.image_search_term.trim();
+        const names = [placeName(english), a.name];
         let area: PlaceArea | null | undefined;
         let match: PlaceDetails | null = null;
         if (english) {
-          const first = await searchPlaces(
+          const ids = await searchPlaces(
             english,
             destination,
             access.tripId,
             "en",
+            true,
           );
-          area = first.area;
-          match = pickPlace(english, first.places, true);
-          if (match && !insideArea(match, area)) match = null;
+          area = ids.area;
+          const top = ids.places[0]?.id;
+          if (top) {
+            // A failed details call just falls through to the named search.
+            const place = await queryClient
+              .fetchQuery({
+                queryKey: ["place", access.tripId, access.shareToken, top],
+                queryFn: () => getPlace(top, access),
+                staleTime: Infinity,
+              })
+              .catch(() => null);
+            if (
+              place &&
+              nameScore(names, place.name || "") >= MATCH_THRESHOLD &&
+              insideArea(place, area)
+            )
+              match = place;
+          }
         }
         if (!match) {
-          const fallback = await searchPlaces(
-            a.name,
+          const named = await searchPlaces(
+            english || a.name,
             destination,
             access.tripId,
+            english ? "en" : "he",
           );
-          area = fallback.area ?? area;
-          match = pickPlace(a.name, fallback.places);
+          area = named.area ?? area;
+          match = pickPlace(names, named.places);
         }
         // A result outside the destination is worse than no link at all: the
         // card stays marked unverified instead of dropping a pin in the wrong
@@ -563,7 +602,8 @@ export function TripWorkspace({
     readOnly,
     generating,
     edit,
-    access.tripId,
+    access,
+    queryClient,
   ]);
   // A freshly generated plan stays covered until the first day's stops have
   // been looked up (linked or not), so the traveller sees it with its places.
@@ -612,13 +652,16 @@ export function TripWorkspace({
   // Chat refinement: the model returns only changed days; kept stops keep
   // their verified place data, new ones go through the usual auto-link.
   const undoSnapshot = useRef<TripPlan | null>(null);
-  const refine = async (message: string) => {
+  const refine = async (
+    message: string,
+    focus: number | null = day === "all" ? null : day,
+  ) => {
     const before = currentPlan.current;
     setChat((c) => [...c, { id: uid(), role: "user", text: message }]);
     setRefining(true);
     try {
       const result = await invoke<RefineResponse>("refine-itinerary", {
-        ...compactPlan(before, day === "all" ? null : day, message),
+        ...compactPlan(before, focus, message),
         tripId: record.id,
       });
       if (!alive.current) return;
@@ -812,12 +855,21 @@ export function TripWorkspace({
   );
   // How far each stop is from the traveller, once they have shared where
   // they are (null when they are not near the destination yet).
+  const placeOf = (a: Activity) =>
+    details[a.place_id || ""]?.coordinates ||
+    (a.source === "manual" ? a.coordinates : undefined);
   const nearby = (a: Activity) => {
-    const at =
-      details[a.place_id || ""]?.coordinates ||
-      (a.source === "manual" ? a.coordinates : undefined);
+    const at = placeOf(a);
     return me.here && at ? distanceLabel(metresBetween(me.here, at)) : null;
   };
+  // A day whose linked stops sit too far apart for how the trip gets around
+  // (a walking day with 14 km between two stops, or a stop linked to the
+  // wrong city) gets a note and a one-tap request to the chat to tighten it.
+  // Travel days are left alone: they span distances by design.
+  const spreadOf = (d: Day) =>
+    d.activities.some((a) => a.transport)
+      ? null
+      : daySpread(d.activities.map((a) => ({ name: a.name, at: placeOf(a) })));
   const renderActivities = (
     activities: Activity[],
     target: number | "saved",
@@ -1305,6 +1357,42 @@ export function TripWorkspace({
                             <small>{d.activities.length} תחנות בדרך</small>
                           </div>
                         </div>
+                        {(() => {
+                          const spread = spreadOf(d);
+                          const around = plan.metadata.gettingAround;
+                          if (!spread || !tooSpread(spread, around))
+                            return null;
+                          const gap = `${formatDistance(spread.longest)} בין ${spread.from} לבין ${spread.to}`;
+                          return (
+                            <div className="day-spread" role="note">
+                              <span>
+                                {around === "foot"
+                                  ? `היום הזה מפוזר להליכה: ${gap}.`
+                                  : around === "car"
+                                    ? `ביום הזה יש הרבה נהיגה: ${gap}.`
+                                    : `היום הזה מפוזר: ${gap}.`}
+                              </span>
+                              {!locked && (
+                                <button
+                                  type="button"
+                                  disabled={refining}
+                                  onClick={() =>
+                                    void refine(
+                                      tightenRequest(
+                                        d.day_number,
+                                        spread,
+                                        around,
+                                      ),
+                                      d.day_number,
+                                    )
+                                  }
+                                >
+                                  צמצום היום
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {renderActivities(
                           d.activities,
                           d.day_number,

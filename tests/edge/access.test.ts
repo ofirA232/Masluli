@@ -166,6 +166,15 @@ Deno.test(
       travelers: 2,
     };
     assert(requestData(body).days === 4);
+    assert(requestData(body).getting_around === null, "no choice, no value");
+    assert(
+      requestData({ ...body, gettingAround: "foot" }).getting_around === "foot",
+      "a known choice passes",
+    );
+    assert(
+      requestData({ ...body, gettingAround: "rocket" }).getting_around === null,
+      "an unknown one does not",
+    );
     await rejected(
       () => requestData({ ...body, startDate: "2026-02-30" }),
       400,
