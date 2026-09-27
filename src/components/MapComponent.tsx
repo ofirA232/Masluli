@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Navigation, Loader2 } from "lucide-react";
+import {
+  MapPin,
+  Navigation,
+  Loader2,
+  Locate,
+  LocateFixed,
+  LocateOff,
+} from "lucide-react";
 import { config } from "@/lib/config";
 import type { Coordinates } from "@/types/itinerary";
+import type { Here, LocationStatus } from "@/hooks/useLiveLocation";
 let loader: Promise<void> | undefined;
 let authFailed = false;
 const reducedMotion = () =>
@@ -54,17 +62,26 @@ export default function MapComponent({
   selectedActivityId,
   onSelect,
   polyline = "",
+  here = null,
+  locationStatus = "off",
+  onLocate,
 }: {
   activities: MapActivity[];
   selectedActivityId?: string | null;
   onSelect: (id: string) => void;
   polyline?: string;
+  here?: Here | null;
+  locationStatus?: LocationStatus;
+  onLocate?: () => void;
 }) {
   const element = useRef<HTMLDivElement>(null),
     map = useRef<google.maps.Map>(),
     markers = useRef<google.maps.Marker[]>([]),
     lastBounds = useRef<google.maps.LatLngBounds>(),
-    line = useRef<google.maps.Polyline>();
+    line = useRef<google.maps.Polyline>(),
+    meDot = useRef<google.maps.Marker>(),
+    meRing = useRef<google.maps.Circle>(),
+    flyToMe = useRef(false);
   const [ready, setReady] = useState(false),
     [error, setError] = useState("");
   const selectRef = useRef(onSelect);
@@ -100,6 +117,8 @@ export default function MapComponent({
       active = false;
       markers.current.forEach((m) => m.setMap(null));
       line.current?.setMap(null);
+      meDot.current?.setMap(null);
+      meRing.current?.setMap(null);
     };
   }, []);
   useEffect(() => {
@@ -201,6 +220,53 @@ export default function MapComponent({
         map: map.current,
       });
   }, [polyline, ready]);
+  // "You are here": a blue dot in a faint ring as wide as the fix is
+  // uncertain. It follows the traveller but never moves the map on its own;
+  // only the locate button brings the map to them.
+  useEffect(() => {
+    if (!ready || !map.current || !here) return;
+    const position = { lat: here.lat, lng: here.lng };
+    if (!meDot.current) {
+      meRing.current = new google.maps.Circle({
+        map: map.current,
+        clickable: false,
+        strokeWeight: 0,
+        fillColor: "#2f80ed",
+        fillOpacity: 0.14,
+      });
+      meDot.current = new google.maps.Marker({
+        map: map.current,
+        clickable: false,
+        title: "המיקום שלכם",
+        zIndex: google.maps.Marker.MAX_ZINDEX + 1,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: "#2f80ed",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 3,
+        },
+      });
+    }
+    meDot.current.setPosition(position);
+    meRing.current?.setCenter(position);
+    meRing.current?.setRadius(Math.min(here.accuracy, 2_000));
+    if (flyToMe.current) {
+      flyToMe.current = false;
+      map.current.panTo(position);
+      if ((map.current.getZoom() ?? 0) < 15) map.current.setZoom(15);
+    }
+  }, [here, ready]);
+  const locate = () => {
+    if (here && map.current) {
+      map.current.panTo({ lat: here.lat, lng: here.lng });
+      if ((map.current.getZoom() ?? 0) < 15) map.current.setZoom(15);
+      return;
+    }
+    flyToMe.current = true;
+    onLocate?.();
+  };
   if (!config.mapsKey || error)
     return (
       <div className="map-unavailable">
@@ -231,6 +297,34 @@ export default function MapComponent({
         <div className="map-empty-message">
           הוסיפו מקום מחיפוש כדי לראות אותו על המפה
         </div>
+      )}
+      {ready && onLocate && (
+        <button
+          type="button"
+          className={`locate-me is-${locationStatus}`}
+          aria-label={
+            locationStatus === "denied"
+              ? "הגישה למיקום חסומה"
+              : "הצגת המיקום שלי"
+          }
+          title={
+            locationStatus === "denied"
+              ? "הגישה למיקום חסומה בהגדרות הדפדפן"
+              : "איפה אני?"
+          }
+          onClick={locate}
+        >
+          {locationStatus === "locating" ? (
+            <Loader2 className="animate-spin" size={19} />
+          ) : locationStatus === "denied" ||
+            locationStatus === "unavailable" ? (
+            <LocateOff size={19} />
+          ) : here ? (
+            <LocateFixed size={19} />
+          ) : (
+            <Locate size={19} />
+          )}
+        </button>
       )}
     </div>
   );

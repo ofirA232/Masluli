@@ -86,6 +86,13 @@ import { compactPlan, mergeRefinement } from "@/lib/refine";
 import { placeCacheFresh, withPlaceCache } from "@/lib/place-cache";
 import { destinationImage } from "@/lib/destinations";
 import { usePlanCover } from "@/components/PlanLoading";
+import { useLiveLocation } from "@/hooks/useLiveLocation";
+import {
+  distanceLabel,
+  localDate,
+  metresBetween,
+  todayCues,
+} from "@/lib/nearby";
 import { beat, cssEase, easeInOut, power2In } from "@/lib/motion";
 import { supabase } from "@/integrations/supabase/client";
 import type {
@@ -126,7 +133,14 @@ export function TripWorkspace({
     { plan, edit, status } = document;
   const location = useLocation(),
     navigate = useNavigate();
-  const [day, setDay] = useState<number | "all">(1),
+  // On a trip day the workspace opens on that day.
+  const [day, setDay] = useState<number | "all">(() => {
+      const today = localDate();
+      const i = plan.days.findIndex(
+        (_, n) => dayDate(plan.metadata.startDate, n) === today,
+      );
+      return i >= 0 ? i + 1 : 1;
+    }),
     [tab, setTab] = useState<"itinerary" | "saved" | "budget" | "notes">(
       "itinerary",
     ),
@@ -577,6 +591,13 @@ export function TripWorkspace({
   }, [covered]);
   // The cover itself lives above the routes (PlanCoverProvider); set before
   // paint so it never drops for a frame between the trip loader and here.
+  // The traveller's own position (stays in the browser); the map's locate
+  // button turns it on.
+  const me = useLiveLocation();
+  useEffect(() => {
+    if (me.status === "denied")
+      toast("הגישה למיקום חסומה. אפשר לאפשר אותה בהגדרות האתר בדפדפן.");
+  }, [me.status]);
   const setCover = usePlanCover();
   useLayoutEffect(() => {
     setCover(generating ? "composing" : awaitingPlaces ? "placing" : null);
@@ -765,6 +786,38 @@ export function TripWorkspace({
       ),
     );
   };
+  // Trip day: which day is today (by the device's own date), refreshed each
+  // minute, and the stop under way / next on it.
+  const [clock, setClock] = useState(() => new Date());
+  const todayNumber = useMemo(() => {
+    const today = localDate(clock);
+    const i = plan.days.findIndex(
+      (_, n) => dayDate(plan.metadata.startDate, n) === today,
+    );
+    return i >= 0 ? i + 1 : null;
+  }, [clock, plan.days, plan.metadata.startDate]);
+  useEffect(() => {
+    const tick = setInterval(() => setClock(new Date()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
+  const cues = useMemo(
+    () =>
+      todayNumber
+        ? todayCues(
+            plan.days[todayNumber - 1]?.activities || [],
+            clock.getHours() * 60 + clock.getMinutes(),
+          )
+        : {},
+    [todayNumber, plan.days, clock],
+  );
+  // How far each stop is from the traveller, once they have shared where
+  // they are (null when they are not near the destination yet).
+  const nearby = (a: Activity) => {
+    const at =
+      details[a.place_id || ""]?.coordinates ||
+      (a.source === "manual" ? a.coordinates : undefined);
+    return me.here && at ? distanceLabel(metresBetween(me.here, at)) : null;
+  };
   const renderActivities = (
     activities: Activity[],
     target: number | "saved",
@@ -824,6 +877,8 @@ export function TripWorkspace({
                     ? null
                     : dayDate(plan.metadata.startDate, target - 1)
                 }
+                nearby={nearby(a)}
+                cue={target === todayNumber ? cues[a.id] : undefined}
                 dayCount={plan.days.length}
                 access={access}
                 readOnly={locked}
@@ -1065,6 +1120,9 @@ export function TripWorkspace({
                 />
                 <div>
                   יום {d.day_number}
+                  {d.day_number === todayNumber && (
+                    <em className="today-mark">היום</em>
+                  )}
                   <small>
                     {formatDate(
                       dayDate(plan.metadata.startDate, d.day_number - 1),
@@ -1180,6 +1238,9 @@ export function TripWorkspace({
                             <ActivePill group="day-chip" />
                           )}
                           יום {d.day_number}
+                          {d.day_number === todayNumber && (
+                            <em className="today-mark">היום</em>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -1331,6 +1392,9 @@ export function TripWorkspace({
                     selectedActivityId={selected}
                     onSelect={select}
                     polyline={canRoute ? route.data?.polyline : ""}
+                    here={me.here}
+                    locationStatus={me.status}
+                    onLocate={me.start}
                   />
                 )}
               </Suspense>

@@ -16,7 +16,9 @@ import {
   Trash2,
   ExternalLink,
   MoreHorizontal,
+  LocateFixed,
 } from "lucide-react";
+import type { Cue } from "@/lib/nearby";
 import type {
   Activity,
   PlaceDetails,
@@ -70,6 +72,10 @@ interface Props {
   >;
   /** This stop sits far from the rest of the trip, so the link looks wrong. */
   farFromTrip?: boolean;
+  /** "450 מ׳ ממך · …" once the traveller shares their position. */
+  nearby?: string | null;
+  /** On a trip day: the stop under way, or the one after it. */
+  cue?: Cue;
   /** Persist freshly fetched Google content into the trip (owner only). */
   onCache?: (id: string, place: PlaceDetails, photo: PlacePhoto) => void;
 }
@@ -93,6 +99,8 @@ export function ActivityCard({
   farFromTrip = false,
   date = null,
   meta,
+  nearby = null,
+  cue,
 }: Props) {
   const kind = stopKind(a);
   // dnd-kit shifts the neighbours while dragging (zoox.com's in-out curve at
@@ -170,7 +178,7 @@ export function ActivityCard({
     <article
       ref={setNodeRef}
       id={`activity-${a.id}`}
-      className={`activity-card is-${kind} ${entering ? "is-entering" : ""} ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""}`}
+      className={`activity-card is-${kind} ${entering ? "is-entering" : ""} ${selected ? "is-selected" : ""} ${isDragging ? "dragging" : ""} ${cue ? `is-${cue}` : ""}`}
       style={{ transform: CSS.Translate.toString(transform), transition }}
     >
       <div ref={visibility} className="activity-content">
@@ -202,6 +210,21 @@ export function ActivityCard({
             </button>
           )}
         </div>
+        {(cue || nearby) && (
+          <div className="activity-cues">
+            {cue && (
+              <span className={`cue is-${cue}`}>
+                {cue === "now" ? "עכשיו" : "הבא בתור"}
+              </span>
+            )}
+            {nearby && (
+              <span className="activity-nearby">
+                <LocateFixed size={12} />
+                {nearby}
+              </span>
+            )}
+          </div>
+        )}
         <div className="activity-main">
           <button
             className="stop-number"

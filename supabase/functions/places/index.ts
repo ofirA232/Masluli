@@ -44,6 +44,8 @@ interface Area {
 // traveller's browser remembers the area for its own session (see api.ts).
 const areas = new Map<string, Promise<Area | null>>();
 const KM = 111_320;
+// The largest radius Places accepts for a locationBias circle.
+const MAX_BIAS_RADIUS = 50_000;
 /**
  * Where a destination sits and how far it spreads, so a text search can be
  * biased towards it. Without this, "Fish Market" can rank a place on the
@@ -219,12 +221,17 @@ Deno.serve((req) =>
           textQuery: english && area ? query : `${query} ${destination}`,
           languageCode: english ? "en" : "he",
           pageSize: 8,
+          // Google rejects a bias circle wider than 50 km (400, which surfaced
+          // as a 502), and a city like Tokyo, whose viewport takes in islands
+          // 1,000 km out, or a whole country is far wider. The bias only nudges
+          // the ranking, so it is capped; the full area still comes back to
+          // the caller to reject matches outside the destination.
           ...(area
             ? {
                 locationBias: {
                   circle: {
                     center: { latitude: area.lat, longitude: area.lng },
-                    radius: area.radius,
+                    radius: Math.min(area.radius, MAX_BIAS_RADIUS),
                   },
                 },
               }
