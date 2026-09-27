@@ -21,9 +21,11 @@ Deno.serve((req) =>
       { headers: { "X-Goog-FieldMask": "photos" } },
     );
     const trip = typeof body.tripId === "string" ? body.tripId : undefined;
+    // A photos-only details call is Google's free IDs Only tier; only the
+    // photo itself below is billed.
     recordUsage({
       service: "place-photo",
-      sku: "details_essentials",
+      sku: "details_ids_only",
       tripId: trip,
     });
     const photo = data.photos?.[0];

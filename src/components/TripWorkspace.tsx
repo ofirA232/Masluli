@@ -25,7 +25,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bookmark,
@@ -79,7 +79,14 @@ import {
   uid,
 } from "@/lib/trips";
 import { getPlace, getRoute, invoke, searchPlaces } from "@/lib/api";
-import { insideArea, outlierStops, pickPlace } from "@/lib/places-match";
+import {
+  insideArea,
+  MATCH_THRESHOLD,
+  nameScore,
+  outlierStops,
+  pickPlace,
+  placeName,
+} from "@/lib/places-match";
 import { LodgingGhost } from "./StopBodies";
 import { RefinePanel, type ChatMessage } from "./RefinePanel";
 import { compactPlan, mergeRefinement } from "@/lib/refine";
@@ -280,6 +287,7 @@ export function TripWorkspace({
       cachedPlace,
     }));
   }, [mapLists]);
+  const queryClient = useQueryClient();
   const prefetched = useQueries({
     queries: linked.map(({ placeId, cachedPlace }) => ({
       queryKey: ["place", access.tripId, access.shareToken, placeId],
@@ -505,32 +513,55 @@ export function TripWorkspace({
       resolved.current.add(a.id);
       pendingPlaces.current++;
       (async () => {
-        // The AI's English name is how Google indexes most places, so it is
-        // searched first and usually links the stop in one paid search. The
-        // Hebrew title is the fallback, not the first attempt: searching it
-        // first cost about two searches per linked stop.
+        // The AI's search term reads "Name, City" in English, which is how
+        // Google indexes most places; the city steers the search. A stop is
+        // linked only to a result whose name matches its English name or its
+        // Hebrew title: trusting whatever ranked first linked invented or
+        // misnamed places, and such a stop now stays marked unverified.
+        //  1. Free: an IDs-only search, and the top hit checked against the
+        //     details the card fetches for it anyway (cached for the card).
+        //  2. Only when that is not the place: one paid search that returns
+        //     names, compared against both of the stop's names.
         const english = a.image_search_term.trim();
+        const names = [placeName(english), a.name];
         let area: PlaceArea | null | undefined;
         let match: PlaceDetails | null = null;
         if (english) {
-          const first = await searchPlaces(
+          const ids = await searchPlaces(
             english,
             destination,
             access.tripId,
             "en",
+            true,
           );
-          area = first.area;
-          match = pickPlace(english, first.places, true);
-          if (match && !insideArea(match, area)) match = null;
+          area = ids.area;
+          const top = ids.places[0]?.id;
+          if (top) {
+            // A failed details call just falls through to the named search.
+            const place = await queryClient
+              .fetchQuery({
+                queryKey: ["place", access.tripId, access.shareToken, top],
+                queryFn: () => getPlace(top, access),
+                staleTime: Infinity,
+              })
+              .catch(() => null);
+            if (
+              place &&
+              nameScore(names, place.name || "") >= MATCH_THRESHOLD &&
+              insideArea(place, area)
+            )
+              match = place;
+          }
         }
         if (!match) {
-          const fallback = await searchPlaces(
-            a.name,
+          const named = await searchPlaces(
+            english || a.name,
             destination,
             access.tripId,
+            english ? "en" : "he",
           );
-          area = fallback.area ?? area;
-          match = pickPlace(a.name, fallback.places);
+          area = named.area ?? area;
+          match = pickPlace(names, named.places);
         }
         // A result outside the destination is worse than no link at all: the
         // card stays marked unverified instead of dropping a pin in the wrong
@@ -563,7 +594,8 @@ export function TripWorkspace({
     readOnly,
     generating,
     edit,
-    access.tripId,
+    access,
+    queryClient,
   ]);
   // A freshly generated plan stays covered until the first day's stops have
   // been looked up (linked or not), so the traveller sees it with its places.

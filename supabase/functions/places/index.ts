@@ -205,6 +205,10 @@ Deno.serve((req) =>
     // English too, so the name match compares like with like. Travellers
     // typing in the search box stay in Hebrew.
     const english = body.language === "en";
+    // IDs only is Google's free search tier: the caller checks the top hit
+    // against the details it fetches for the card anyway, and pays for a
+    // named search only when that hit is not the place.
+    const idsOnly = body.idsOnly === true;
     const area =
       givenArea(body.area) ?? (await destinationArea(destination, tripId));
     const data = await googleFetch(
@@ -212,15 +216,16 @@ Deno.serve((req) =>
       {
         method: "POST",
         headers: {
-          "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.location,places.attributions",
+          "X-Goog-FieldMask": idsOnly
+            ? "places.id"
+            : "places.id,places.displayName,places.formattedAddress,places.location,places.attributions",
         },
         body: JSON.stringify({
           // With an area the bias already places the search, and a Hebrew
           // destination appended to an English name only muddies the query.
           textQuery: english && area ? query : `${query} ${destination}`,
           languageCode: english ? "en" : "he",
-          pageSize: 8,
+          pageSize: idsOnly ? 3 : 8,
           // Google rejects a bias circle wider than 50 km (400, which surfaced
           // as a 502), and a city like Tokyo, whose viewport takes in islands
           // 1,000 km out, or a whole country is far wider. The bias only nudges
@@ -241,7 +246,11 @@ Deno.serve((req) =>
     );
     // The area travels with the results so the caller can reject a match that
     // landed in the wrong country.
-    recordUsage({ service: "places-search", sku: "text_search_pro", tripId });
+    recordUsage({
+      service: "places-search",
+      sku: idsOnly ? "text_search_ids" : "text_search_pro",
+      tripId,
+    });
     return { places: (data.places || []).map(format), area };
   }),
 );

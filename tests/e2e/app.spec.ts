@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { setDates, setup, tripId } from "./fixtures";
+import { initialPlan, setDates, setup, tripId } from "./fixtures";
 test("homepage and mobile layout remain usable", async ({ page }) => {
   await setup(page, false);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -114,6 +114,77 @@ test("AI generation renders before optional provider enrichment", async ({
     .poll(() => state.row.trip_data.days[0].activities[0]?.source)
     .toBe("ai");
 });
+test("AI stops link through the free search, paying only for a miss", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const stop = (name: string, term: string, id: string) => ({
+    ...initialPlan.days[0].activities[0],
+    id,
+    name,
+    image_search_term: term,
+    source: "ai",
+  });
+  await page.route("**/functions/v1/generate-itinerary**", (route) =>
+    route.fulfill({
+      json: {
+        days: [
+          {
+            day_number: 1,
+            activities: [
+              stop("מוזיאון הלובר", "Louvre Museum, Paris", "ai-louvre"),
+              stop("מגדל אייפל", "Eiffel Tower, Paris", "ai-eiffel"),
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  const calls = { ids: 0, named: 0 };
+  const paris = { lat: 48.86, lng: 2.33 };
+  await page.route("**/functions/v1/places**", (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action === "details")
+      return route.fulfill({
+        json: {
+          id: body.placeId,
+          // The free search's top hit for the tower is a café nearby.
+          name: body.placeId === "louvre" ? "Louvre Museum" : "Café Constant",
+          coordinates: paris,
+        },
+      });
+    if (body.idsOnly) {
+      calls.ids++;
+      return route.fulfill({
+        json: {
+          places: [{ id: body.query.startsWith("Louvre") ? "louvre" : "cafe" }],
+          area: null,
+        },
+      });
+    }
+    calls.named++;
+    return route.fulfill({
+      json: {
+        places: [
+          { id: "cafe", name: "Café Constant", coordinates: paris },
+          { id: "eiffel", name: "Eiffel Tower", coordinates: paris },
+        ],
+        area: null,
+      },
+    });
+  });
+  await page.goto("/trip/new");
+  await page.locator("[name=destination]").fill("פריז");
+  await setDates(page, "2027-10-04", "2027-10-04");
+  await page.getByRole("button", { name: "יוצרים את הטיול שלי" }).click();
+  await expect
+    .poll(() =>
+      state.row.trip_data.days[0].activities.map((a) => a.place_id).join(),
+    )
+    .toBe("louvre,eiffel");
+  expect(calls).toEqual({ ids: 2, named: 1 });
+});
+
 test("failed saves preserve the draft and retry successfully", async ({
   page,
 }) => {
