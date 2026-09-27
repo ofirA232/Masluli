@@ -15,39 +15,11 @@ import {
   foodOptions,
   interestOptions,
   mobilityOptions,
+  gettingAroundOptions,
   paceOptions,
 } from "@/lib/preferences";
 import type { TravelPreferences } from "@/types/profile";
-function Choices<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: { value: T; label: string }[];
-  value: T | null;
-  onChange: (v: T | null) => void;
-}) {
-  return (
-    <div className="choice-group" role="group" aria-label={label}>
-      <h3>{label}</h3>
-      <div>
-        {options.map((o) => (
-          <button
-            type="button"
-            key={o.value}
-            aria-pressed={value === o.value}
-            className={value === o.value ? "selected" : ""}
-            onClick={() => onChange(value === o.value ? null : o.value)}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+import { Choices } from "./Choices";
 export function ProfileDialog({ onClose }: { onClose: () => void }) {
   const dialog = useClosingDialog(onClose);
   const { preferences, loaded, save } = useTravelerProfile();
@@ -103,6 +75,12 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
             options={mobilityOptions}
             value={form.mobility}
             onChange={(mobility) => setForm({ ...form, mobility })}
+          />
+          <Choices
+            label="איך אתם מתניידים בדרך כלל?"
+            options={gettingAroundOptions}
+            value={form.getting_around}
+            onChange={(getting_around) => setForm({ ...form, getting_around })}
           />
           <div className="choice-group" role="group" aria-label="אוכל">
             <h3>אוכל</h3>

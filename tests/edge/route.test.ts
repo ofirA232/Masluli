@@ -121,3 +121,16 @@ Deno.test("each batch is told its days, where it starts and its stays", () => {
   assert(first.includes("in Tokyo for 3 nights"), "first stay");
   assert(!first.includes("starts in"), "day 1 has no previous night");
 });
+
+Deno.test("a move back to where they already slept is dropped", () => {
+  const route = normaliseRoute(
+    [
+      day("Rome"),
+      day("Rome", "Rome", { mode: "car", from: "Rome", to: "Tivoli" }),
+      day("Rome", "Rome", { mode: "car", from: "Tivoli", to: "Rome" }),
+    ],
+    3,
+  )!;
+  assert(route[1].transfer?.to === "Tivoli", "the day trip stays");
+  assert(route[2].transfer === null, "the repeated return is gone");
+});

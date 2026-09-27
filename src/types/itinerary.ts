@@ -1,3 +1,4 @@
+import type { GettingAround } from "./profile";
 export interface Coordinates {
   lat: number;
   lng: number;
@@ -76,6 +77,7 @@ export interface ItineraryRequest {
   travelers: number;
   budget?: string;
   interests?: string[];
+  gettingAround?: GettingAround;
 }
 
 export type Category = Activity["category"];
@@ -101,6 +103,8 @@ export interface TripMetadata {
   travelersList: Traveler[];
   interests: string[];
   targetBudget: number | null;
+  /** How this trip gets around; falls back to the traveller's profile. */
+  gettingAround: GettingAround | null;
 }
 /** equal: keys are the participants (empty = everyone); custom: amounts in `currency`. */
 export interface ExpenseSplit {

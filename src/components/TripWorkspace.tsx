@@ -453,6 +453,7 @@ export function TripWorkspace({
         endDate: original.metadata.endDate,
         travelers: original.metadata.travelers,
         interests: original.metadata.interests,
+        gettingAround: original.metadata.gettingAround ?? undefined,
         budget:
           original.metadata.targetBudget === null
             ? undefined

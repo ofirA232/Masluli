@@ -11,6 +11,8 @@ import { TravelersEditor } from "./TravelersEditor";
 import { dayCount, dateOnly } from "@/lib/trips";
 import { pruneTravelerRefs } from "@/lib/budget";
 import type { TripPlan } from "@/types/itinerary";
+import { gettingAroundOptions } from "@/lib/preferences";
+import { Choices } from "./Choices";
 export function TripSettings({
   plan,
   onSave,
@@ -126,6 +128,12 @@ export function TripSettings({
               />
             </label>
           </div>
+          <Choices
+            label="איך מתניידים?"
+            options={gettingAroundOptions}
+            value={meta.gettingAround}
+            onChange={(gettingAround) => setMeta({ ...meta, gettingAround })}
+          />
           <fieldset>
             <legend>מי נוסע ({meta.travelersList.length})</legend>
             <TravelersEditor

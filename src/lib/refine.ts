@@ -26,6 +26,7 @@ export function compactPlan(
       travelers: plan.metadata.travelers,
       interests: plan.metadata.interests,
       targetBudget: plan.metadata.targetBudget,
+      gettingAround: plan.metadata.gettingAround,
     },
     days: plan.days.map((d) => {
       const near =

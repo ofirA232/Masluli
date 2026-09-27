@@ -19,6 +19,7 @@ export const initialPlan: TripPlan = {
     ],
     interests: [],
     targetBudget: 3000,
+    gettingAround: null,
   },
   days: [
     {
