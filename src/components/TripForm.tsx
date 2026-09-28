@@ -3,17 +3,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { MapPin, Sparkles, ArrowLeft, Loader2, Wallet, X } from "lucide-react";
 import { useAuthState } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { requestSchema } from "@/lib/trips";
+import { requestSchemaFor } from "@/lib/trips";
 import { invoke } from "@/lib/api";
 import type { ItineraryRequest } from "@/types/itinerary";
-import {
-  gettingAroundOptions,
-  interestOptions as interests,
-} from "@/lib/preferences";
+import { preferenceOptions } from "@/lib/preferences";
 import { useTravelerProfile } from "@/hooks/useTravelerProfile";
 import { Choices } from "./Choices";
 import { TripDates } from "./TripDates";
 import { TravelersField } from "./TravelersField";
+import { useLang, useT } from "@/i18n";
 export const requestKey = "planatrip:new-trip";
 export function TripForm({
   compact = false,
@@ -27,6 +25,9 @@ export function TripForm({
   const navigate = useNavigate(),
     [params] = useSearchParams(),
     { user } = useAuthState();
+  const t = useT().form,
+    { lang } = useLang(),
+    options = preferenceOptions(lang);
   const [form, setForm] = useState<ItineraryRequest>(() => {
     try {
       const stored = JSON.parse(sessionStorage.getItem(requestKey) || "null");
@@ -114,7 +115,7 @@ export function TripForm({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const result = requestSchema.safeParse(form);
+    const result = requestSchemaFor(lang).safeParse(form);
     if (!result.success) {
       setError(result.error.issues[0].message);
       return;
@@ -129,7 +130,7 @@ export function TripForm({
       if (onSubmit) await onSubmit(form, ai);
       else navigate("/trip/new");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "יצירת הטיול לא הצליחה");
+      setError(e instanceof Error ? e.message : t.createFailed);
     }
   };
   return (
@@ -141,7 +142,7 @@ export function TripForm({
         <label className="field destination-field">
           <span>
             <MapPin size={16} />
-            לאן?
+            {t.whereTo}
           </span>
           <input
             name="destination"
@@ -174,7 +175,7 @@ export function TripForm({
                 choose(suggestions[highlight].name);
               } else if (e.key === "Escape") setFocused(false);
             }}
-            placeholder="עיר, אזור או מדינה"
+            placeholder={t.destinationPlaceholder}
             maxLength={100}
             required
             autoComplete="off"
@@ -183,7 +184,7 @@ export function TripForm({
             <button
               type="button"
               className="field-clear"
-              aria-label="ניקוי היעד"
+              aria-label={t.clearDestination}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setForm({ ...form, destination: "" })}
             >
@@ -227,7 +228,7 @@ export function TripForm({
         />
         {compact && (
           <Button type="submit" size="lg" className="plan-submit">
-            בואו נתכנן <ArrowLeft size={18} />
+            {t.letsPlan} <ArrowLeft size={18} />
           </Button>
         )}
       </div>
@@ -236,7 +237,7 @@ export function TripForm({
           <label className="field budget-input">
             <span>
               <Wallet size={16} />
-              תקציב לכל הטיול, בשקלים <small>(לא חובה)</small>
+              {t.budget} <small>{t.optional}</small>
             </span>
             <input
               name="budget"
@@ -245,16 +246,16 @@ export function TripForm({
               min="0"
               max="10000000"
               step="1"
-              placeholder="כמה תרצו להוציא?"
+              placeholder={t.budgetPlaceholder}
               value={form.budget}
               onChange={(e) => setForm({ ...form, budget: e.target.value })}
             />
           </label>
           <div className="interests">
-            <h3>מה עושה לכם את הטיול?</h3>
-            <p>בחרו את הדברים שאתם אוהבים. נדאג להשאיר מקום להפתעות.</p>
+            <h3>{t.interestsTitle}</h3>
+            <p>{t.interestsHint}</p>
             <div>
-              {interests.map((interest) => (
+              {options.interests.map(({ value: interest, label }) => (
                 <button
                   type="button"
                   key={interest}
@@ -271,22 +272,22 @@ export function TripForm({
                     })
                   }
                 >
-                  {interest}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
           <Choices
-            label="איך מתניידים?"
-            hint="ככה נדע כמה לפזר כל יום: בהליכה הכל קרוב, ברכב אפשר רחוק יותר."
-            options={gettingAroundOptions}
+            label={t.gettingAround}
+            hint={t.gettingAroundHint}
+            options={options.gettingAround}
             value={form.gettingAround ?? null}
             onChange={(gettingAround) =>
               setForm({ ...form, gettingAround: gettingAround ?? undefined })
             }
           />
           <fieldset className="creation-mode">
-            <legend>איך מתחילים?</legend>
+            <legend>{t.modeLegend}</legend>
             <label className={ai ? "selected" : ""}>
               <input
                 type="radio"
@@ -296,8 +297,8 @@ export function TripForm({
               />
               <Sparkles size={21} />
               <span>
-                <strong>עם קצת עזרה מ־AI</strong>
-                <small>הצעה אישית שאפשר לשנות בחופשיות</small>
+                <strong>{t.aiTitle}</strong>
+                <small>{t.aiText}</small>
               </span>
             </label>
             <label className={!ai ? "selected" : ""}>
@@ -309,14 +310,14 @@ export function TripForm({
               />
               <MapPin size={21} />
               <span>
-                <strong>בדיוק בדרך שלי</strong>
-                <small>מסלול ריק, וכל האפשרויות פתוחות</small>
+                <strong>{t.manualTitle}</strong>
+                <small>{t.manualText}</small>
               </span>
             </label>
           </fieldset>
           <Button type="submit" size="lg" disabled={busy} className="w-full">
             {busy ? <Loader2 className="animate-spin" /> : <ArrowLeft />}
-            {busy ? "פותחים את הטיול שלכם…" : "יוצרים את הטיול שלי"}
+            {busy ? t.creating : t.create}
           </Button>
         </>
       )}

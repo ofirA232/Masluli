@@ -1,4 +1,5 @@
 import type { GettingAround } from "@/types/profile";
+import { currentLang, strings, type Lang } from "@/i18n";
 // Where the traveller stands relative to their stops, which stop is on now,
 // and whether a day's stops fit how the travellers get around. Everything here runs in the browser on the position the device gives;
 // nothing is sent anywhere.
@@ -25,20 +26,26 @@ const WALK_DETOUR = 1.3,
   WALK_METRES_PER_MINUTE = 80,
   WALKABLE = 2_000;
 /** "450 מ׳", "3.2 ק״מ", "24 ק״מ". */
-export const formatDistance = (metres: number) =>
-  metres < 1_000
-    ? `${Math.max(10, Math.round(metres / 10) * 10)} מ׳`
-    : `${(metres / 1_000).toFixed(metres < 10_000 ? 1 : 0)} ק״מ`;
+export function formatDistance(metres: number, lang: Lang = currentLang()) {
+  const words = strings(lang).card.nearby;
+  return metres < 1_000
+    ? words.metres(Math.max(10, Math.round(metres / 10) * 10))
+    : words.km((metres / 1_000).toFixed(metres < 10_000 ? 1 : 0));
+}
 /** "450 מ׳ ממך · כ־7 דק׳ הליכה", or null when too far to be useful. */
-export function distanceLabel(metres: number): string | null {
+export function distanceLabel(
+  metres: number,
+  lang: Lang = currentLang(),
+): string | null {
   if (!Number.isFinite(metres) || metres > USEFUL_RANGE) return null;
-  const distance = formatDistance(metres);
-  if (metres > WALKABLE) return `${distance} ממך`;
+  const words = strings(lang).card.nearby;
+  const distance = formatDistance(metres, lang);
+  if (metres > WALKABLE) return words.fromYou(distance);
   const minutes = Math.max(
     1,
     Math.round((metres * WALK_DETOUR) / WALK_METRES_PER_MINUTE),
   );
-  return `${distance} ממך · כ־${minutes} דק׳ הליכה`;
+  return words.walk(distance, minutes);
 }
 /** The device's calendar date, YYYY-MM-DD, in its own time zone. */
 export function localDate(now = new Date()): string {
@@ -155,16 +162,23 @@ export function tooSpread(spread: Spread, mode: GettingAround | null) {
   const limit = LIMITS[mode || "mixed"];
   return spread.longest > limit.hop || spread.total > limit.total;
 }
+/** A day's longest hop in words: the distance and the two stops. */
+export const spreadGap = (spread: Spread, lang: Lang = currentLang()) =>
+  strings(lang).card.nearby.between(
+    formatDistance(spread.longest, lang),
+    spread.from,
+    spread.to,
+  );
 /** The request the chat gets when the traveller asks to tighten a day. */
 export function tightenRequest(
   day: number,
   spread: Spread,
   mode: GettingAround | null,
+  lang: Lang = currentLang(),
 ) {
-  const where = `${formatDistance(spread.longest)} בין ${spread.from} לבין ${spread.to}`;
-  if (mode === "foot")
-    return `יום ${day} מפוזר מדי להליכה (${where}). תבנה אותו מחדש סביב אזור אחד, עם תחנות במרחק הליכה או נסיעה קצרה בתחבורה ציבורית זו מזו.`;
-  if (mode === "car")
-    return `ביום ${day} יש יותר מדי נהיגה (${where}). תצמצם את הנסיעות לאזור אחד.`;
-  return `יום ${day} מפוזר מדי (${where}). תצמצם אותו לאזור אחד, או תהפוך את החלק הרחוק לטיול יום משלו.`;
+  const words = strings(lang).card.nearby;
+  const where = spreadGap(spread, lang);
+  if (mode === "foot") return words.tightenFoot(day, where);
+  if (mode === "car") return words.tightenCar(day, where);
+  return words.tighten(day, where);
 }

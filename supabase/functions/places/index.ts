@@ -7,6 +7,7 @@ import {
   googleFetch,
   authorizePlaces,
   recordUsage,
+  siteLang,
   ApiError,
 } from "../_shared/http.ts";
 const fields =
@@ -153,7 +154,13 @@ const format = (p: GooglePlace) => ({
 Deno.serve((req) =>
   handler(req, async (body) => {
     googleKey();
+    // Names, addresses and opening hours come back in the site's language.
+    const lang = siteLang(body);
     if (body.action === "details") {
+      // A stop's details come in its trip's language (`language`), since
+      // they are kept in the trip and its name is matched against the stop's.
+      const detailsLang =
+        body.language === "en" || body.language === "he" ? body.language : lang;
       const id = textInput(body.placeId, 300);
       const identity = await authorizePlaces(req, body, [id]);
       await quota(identity, "places-details");
@@ -165,7 +172,7 @@ Deno.serve((req) =>
       });
       return format(
         await googleFetch(
-          `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=he`,
+          `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?languageCode=${detailsLang}`,
           { headers: { "X-Goog-FieldMask": fields } },
         ),
       );
@@ -180,7 +187,7 @@ Deno.serve((req) =>
           method: "POST",
           body: JSON.stringify({
             input: query,
-            languageCode: "he",
+            languageCode: lang,
             includedPrimaryTypes: ["(cities)"],
           }),
         },
@@ -195,7 +202,11 @@ Deno.serve((req) =>
           })),
       };
     }
-    if (body.action !== "search") throw new ApiError(400, "פעולה לא תקינה");
+    if (body.action !== "search")
+      throw new ApiError(400, {
+        he: "פעולה לא תקינה",
+        en: "The action isn't valid",
+      });
     const destination =
       typeof body.destination === "string"
         ? body.destination.slice(0, 100)
@@ -203,7 +214,7 @@ Deno.serve((req) =>
     const tripId = typeof body.tripId === "string" ? body.tripId : undefined;
     // "en" is used for the AI's English place names: results then come back in
     // English too, so the name match compares like with like. Travellers
-    // typing in the search box stay in Hebrew.
+    // typing in the search box get the site's language.
     const english = body.language === "en";
     // IDs only is Google's free search tier: the caller checks the top hit
     // against the details it fetches for the card anyway, and pays for a
@@ -224,7 +235,7 @@ Deno.serve((req) =>
           // With an area the bias already places the search, and a Hebrew
           // destination appended to an English name only muddies the query.
           textQuery: english && area ? query : `${query} ${destination}`,
-          languageCode: english ? "en" : "he",
+          languageCode: english ? "en" : lang,
           pageSize: idsOnly ? 3 : 8,
           // Google rejects a bias circle wider than 50 km (400, which surfaced
           // as a 502), and a city like Tokyo, whose viewport takes in islands

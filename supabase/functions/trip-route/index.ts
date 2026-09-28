@@ -16,7 +16,10 @@ Deno.serve((req) =>
       body.placeIds.length < 2 ||
       body.placeIds.length > 25
     )
-      throw new ApiError(400, "יש לבחור 2 עד 25 תחנות");
+      throw new ApiError(400, {
+        he: "יש לבחור 2 עד 25 תחנות",
+        en: "Choose 2 to 25 stops",
+      });
     const ids = body.placeIds.map((id) => textInput(id, 300));
     const identity = await authorizePlaces(req, body, ids);
     await quota(identity, "routes", 20);
@@ -44,7 +47,11 @@ Deno.serve((req) =>
       },
     );
     const route = result.routes?.[0];
-    if (!route) throw new ApiError(404, "לא נמצא מסלול מעבר בין התחנות שנבחרו");
+    if (!route)
+      throw new ApiError(404, {
+        he: "לא נמצא מסלול מעבר בין התחנות שנבחרו",
+        en: "No route was found between the chosen stops",
+      });
     return {
       polyline: route.polyline?.encodedPolyline || "",
       distance: route.distanceMeters,

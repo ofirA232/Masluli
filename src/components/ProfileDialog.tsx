@@ -10,19 +10,17 @@ import {
 import { useClosingDialog } from "@/hooks/useClosingDialog";
 import { Button } from "./ui/button";
 import { useTravelerProfile } from "@/hooks/useTravelerProfile";
-import {
-  budgetOptions,
-  foodOptions,
-  interestOptions,
-  mobilityOptions,
-  gettingAroundOptions,
-  paceOptions,
-} from "@/lib/preferences";
+import { preferenceOptions } from "@/lib/preferences";
 import type { TravelPreferences } from "@/types/profile";
 import { Choices } from "./Choices";
+import { useLang, useT } from "@/i18n";
 export function ProfileDialog({ onClose }: { onClose: () => void }) {
   const dialog = useClosingDialog(onClose);
   const { preferences, loaded, save } = useTravelerProfile();
+  const words = useT(),
+    t = words.profile,
+    { lang } = useLang(),
+    options = preferenceOptions(lang);
   const [form, setForm] = useState<TravelPreferences>(preferences);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -39,10 +37,12 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       await save(form);
-      toast.success("ההעדפות נשמרו. ההצעות הבאות כבר יתאימו לכם.");
+      toast.success(t.saved);
       dialog.close();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "השמירה נכשלה");
+      setError(
+        err instanceof Error ? err.message : words.common.errors.saveFailedShort,
+      );
     } finally {
       setBusy(false);
     }
@@ -53,39 +53,37 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
         className="activity-dialog profile-dialog"
         {...dialog.contentProps}
       >
-        <DialogTitle>איך אתם אוהבים לטייל?</DialogTitle>
-        <DialogDescription>
-          כמה בחירות קצרות. הפרטים פרטיים ומשפיעים על כל הצעה של ה־AI.
-        </DialogDescription>
+        <DialogTitle>{t.title}</DialogTitle>
+        <DialogDescription>{t.description}</DialogDescription>
         <form onSubmit={submit} className="profile-form">
           <Choices
-            label="קצב"
-            options={paceOptions}
+            label={t.pace}
+            options={options.pace}
             value={form.pace}
             onChange={(pace) => setForm({ ...form, pace })}
           />
           <Choices
-            label="רמת תקציב"
-            options={budgetOptions}
+            label={t.budget}
+            options={options.budget}
             value={form.budget}
             onChange={(budget) => setForm({ ...form, budget })}
           />
           <Choices
-            label="ניידות"
-            options={mobilityOptions}
+            label={t.mobility}
+            options={options.mobility}
             value={form.mobility}
             onChange={(mobility) => setForm({ ...form, mobility })}
           />
           <Choices
-            label="איך אתם מתניידים בדרך כלל?"
-            options={gettingAroundOptions}
+            label={t.gettingAround}
+            options={options.gettingAround}
             value={form.getting_around}
             onChange={(getting_around) => setForm({ ...form, getting_around })}
           />
-          <div className="choice-group" role="group" aria-label="אוכל">
-            <h3>אוכל</h3>
+          <div className="choice-group" role="group" aria-label={t.food}>
+            <h3>{t.food}</h3>
             <div>
-              {foodOptions.map((o) => (
+              {options.food.map((o) => (
                 <button
                   type="button"
                   key={o.value}
@@ -100,10 +98,10 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </div>
-          <div className="choice-group" role="group" aria-label="מה מעניין אתכם">
-            <h3>מה מעניין אתכם</h3>
+          <div className="choice-group" role="group" aria-label={t.interests}>
+            <h3>{t.interests}</h3>
             <div>
-              {interestOptions.map((i) => (
+              {options.interests.map(({ value: i, label }) => (
                 <button
                   type="button"
                   key={i}
@@ -113,7 +111,7 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
                     setForm({ ...form, interests: toggle(form.interests, i) })
                   }
                 >
-                  {i}
+                  {label}
                 </button>
               ))}
             </div>
@@ -124,13 +122,13 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
               checked={form.kids}
               onChange={(e) => setForm({ ...form, kids: e.target.checked })}
             />
-            <span>מטיילים עם ילדים</span>
+            <span>{t.kids}</span>
           </label>
           <label className="field">
-            <span>מה מעצבן אתכם בטיולים? (לא חובה)</span>
+            <span>{t.petPeeves}</span>
             <textarea
               maxLength={300}
-              placeholder="תורים ארוכים, מקומות תיירותיים מדי, קימה מוקדמת…"
+              placeholder={t.petPeevesPlaceholder}
               value={form.pet_peeves}
               onChange={(e) => setForm({ ...form, pet_peeves: e.target.value })}
             />
@@ -142,7 +140,7 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
           )}
           <Button type="submit" className="w-full mt-4" disabled={busy}>
             {busy ? <Loader2 className="animate-spin" /> : <Sparkles size={16} />}
-            שמירת ההעדפות
+            {t.save}
           </Button>
         </form>
       </DialogContent>

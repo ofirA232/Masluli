@@ -123,7 +123,10 @@ export async function planRoute(
     );
   }
   if (usable) return usable;
-  throw new ApiError(502, "לא הצלחנו לתכנן את מסלול הטיול. אפשר לנסות שוב.");
+  throw new ApiError(502, {
+    he: "לא הצלחנו לתכנן את מסלול הטיול. אפשר לנסות שוב.",
+    en: "We couldn't plan the trip's route. Please try again.",
+  });
 }
 /** The part of the route one batch writes, as instructions for it. */
 export function routeBrief(route: RouteDay[], start: number, count: number) {

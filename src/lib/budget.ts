@@ -1,4 +1,5 @@
 import { categories, dateOnly, round2 } from "./trips";
+import { currentLang, strings, type Lang } from "@/i18n";
 import type { Category, Expense, Traveler, TripPlan } from "@/types/itinerary";
 export const CURRENCIES = [
   "ILS",
@@ -14,20 +15,10 @@ export const CURRENCIES = [
   "HUF",
   "INR",
 ] as const;
-export const currencyLabels: Record<string, string> = {
-  ILS: "₪ שקל",
-  USD: "$ דולר",
-  EUR: "€ אירו",
-  GBP: "£ לירה שטרלינג",
-  THB: "฿ באט תאילנדי",
-  JPY: "¥ ין יפני",
-  TRY: "₺ לירה טורקית",
-  CHF: "פרנק שוויצרי",
-  CZK: "כתר צ'כי",
-  PLN: "זלוטי",
-  HUF: "פורינט",
-  INR: "₹ רופי",
-};
+/** Currency names for the currency picker, in a language. */
+export const currencyLabels = (
+  lang: Lang = currentLang(),
+): Record<string, string> => strings(lang).budget.currencies;
 export const toIls = (amount: number, rate: number) => round2(amount * rate);
 /** Who shares an expense: the listed participants, or everyone. */
 export function participants(e: Expense, travelers: Traveler[]): string[] {
@@ -147,11 +138,17 @@ export function totalsByDay(plan: TripPlan) {
     a.date === null ? 1 : b.date === null ? -1 : a.date.localeCompare(b.date),
   );
 }
-export function addTraveler(list: Traveler[]): Traveler[] {
+export function addTraveler(
+  list: Traveler[],
+  lang: Lang = currentLang(),
+): Traveler[] {
   if (list.length >= 20) return list;
   let n = list.length + 1;
   while (list.some((t) => t.id === `t${n}`)) n++;
-  return [...list, { id: `t${n}`, name: `מטייל ${list.length + 1}` }];
+  return [
+    ...list,
+    { id: `t${n}`, name: strings(lang).budget.travelerName(list.length + 1) },
+  ];
 }
 /** Forget references to travelers who left; their expenses become "unpaid by". */
 export function pruneTravelerRefs(

@@ -31,7 +31,10 @@ Deno.serve((req) =>
     const photo = data.photos?.[0];
     if (!photo) return { url: null, authors: [] };
     if (!/^places\/[^/]+\/photos\/[^/]+$/.test(photo.name))
-      throw new ApiError(502, "התמונה אינה זמינה");
+      throw new ApiError(502, {
+        he: "התמונה אינה זמינה",
+        en: "The photo isn't available",
+      });
     // Resolve a fresh reference on every request. Never store photo names or proxy keys to clients.
     const media = await googleFetch(
       `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=600&skipHttpRedirect=true`,

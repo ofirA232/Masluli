@@ -1,3 +1,4 @@
+import { strings } from "@/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TripPlan, TripRecord } from "@/types/itinerary";
 import { normalizePlan } from "@/lib/trips";
@@ -26,7 +27,7 @@ export function useTripDocument(record: TripRecord, readOnly: boolean) {
   >(initial.conflict ? "conflict" : "saved");
   const [error, setError] = useState(
     initial.conflict
-      ? "קיימת טיוטה מקומית, ובינתיים הטיול השתנה במקום אחר."
+      ? strings().common.errors.localDraftConflict
       : "",
   );
   const current = useRef(plan),
@@ -82,7 +83,7 @@ export function useTripDocument(record: TripRecord, readOnly: boolean) {
         persist();
         if (active.current) {
           setStatus(blocked.current ? "conflict" : "error");
-          setError(e instanceof Error ? e.message : "השמירה נכשלה");
+          setError(e instanceof Error ? e.message : strings().common.errors.saveFailedShort);
         }
         return false;
       } finally {

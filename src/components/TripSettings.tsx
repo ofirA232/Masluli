@@ -11,8 +11,9 @@ import { TravelersEditor } from "./TravelersEditor";
 import { dayCount, dateOnly } from "@/lib/trips";
 import { pruneTravelerRefs } from "@/lib/budget";
 import type { TripPlan } from "@/types/itinerary";
-import { gettingAroundOptions } from "@/lib/preferences";
+import { preferenceOptions } from "@/lib/preferences";
 import { Choices } from "./Choices";
+import { useLang, useT } from "@/i18n";
 export function TripSettings({
   plan,
   onSave,
@@ -23,6 +24,9 @@ export function TripSettings({
   onClose: () => void;
 }) {
   const dialog = useClosingDialog(onClose);
+  const trip = useT().trip,
+    words = trip.settings,
+    { lang } = useLang();
   const [meta, setMeta] = useState(plan.metadata),
     [error, setError] = useState("");
   const inUse = new Set(
@@ -38,20 +42,18 @@ export function TripSettings({
       saved = plan.saved_places;
     if (meta.startDate || meta.endDate) {
       if (!dateOnly(meta.startDate) || !dateOnly(meta.endDate)) {
-        setError("יש לבחור את שני התאריכים");
+        setError(words.bothDates);
         return;
       }
       const count = dayCount(meta.startDate!, meta.endDate!);
       if (count < 1 || count > 30) {
-        setError("הטיול יכול לכלול יום אחד עד 30 ימים");
+        setError(words.length);
         return;
       }
       const overflow = days.slice(count).flatMap((d) => d.activities);
       if (
         overflow.length &&
-        !window.confirm(
-          "הימים שיוסרו כוללים תחנות. להעביר אותן למקומות ששמרתי?",
-        )
+        !window.confirm(words.moveOverflow)
       )
         return;
       saved = [...saved, ...overflow];
@@ -62,7 +64,7 @@ export function TripSettings({
     }
     const travelersList = meta.travelersList.map((t, i) => ({
       ...t,
-      name: t.name.trim() || `מטייל ${i + 1}`,
+      name: t.name.trim() || trip.travelers.fallbackName(i + 1),
     }));
     onSave({
       ...plan,
@@ -76,13 +78,11 @@ export function TripSettings({
   return (
     <Dialog {...dialog.rootProps}>
       <DialogContent className="activity-dialog" {...dialog.contentProps}>
-        <DialogTitle>פרטי הטיול</DialogTitle>
-        <DialogDescription>
-          הטיול משתנה איתכם. שינוי התאריכים שומר את התחנות שלכם.
-        </DialogDescription>
+        <DialogTitle>{words.title}</DialogTitle>
+        <DialogDescription>{words.description}</DialogDescription>
         <form onSubmit={save}>
           <label className="field">
-            <span>שם הטיול</span>
+            <span>{words.name}</span>
             <input
               required
               maxLength={150}
@@ -92,7 +92,7 @@ export function TripSettings({
           </label>
           <div className="editor-fields">
             <label className="field">
-              <span>תאריך התחלה</span>
+              <span>{trip.dates.start}</span>
               <input
                 type="date"
                 value={meta.startDate || ""}
@@ -102,7 +102,7 @@ export function TripSettings({
               />
             </label>
             <label className="field">
-              <span>תאריך סיום</span>
+              <span>{trip.dates.end}</span>
               <input
                 type="date"
                 value={meta.endDate || ""}
@@ -112,7 +112,7 @@ export function TripSettings({
               />
             </label>
             <label className="field">
-              <span>תקציב בשקלים</span>
+              <span>{words.budget}</span>
               <input
                 type="number"
                 min="0"
@@ -129,13 +129,13 @@ export function TripSettings({
             </label>
           </div>
           <Choices
-            label="איך מתניידים?"
-            options={gettingAroundOptions}
+            label={words.gettingAround}
+            options={preferenceOptions(lang).gettingAround}
             value={meta.gettingAround}
             onChange={(gettingAround) => setMeta({ ...meta, gettingAround })}
           />
           <fieldset>
-            <legend>מי נוסע ({meta.travelersList.length})</legend>
+            <legend>{words.who(meta.travelersList.length)}</legend>
             <TravelersEditor
               value={meta.travelersList}
               inUse={inUse}
@@ -153,7 +153,7 @@ export function TripSettings({
               {error}
             </p>
           )}
-          <Button className="w-full mt-4">שמירת פרטי הטיול</Button>
+          <Button className="w-full mt-4">{words.save}</Button>
         </form>
       </DialogContent>
     </Dialog>

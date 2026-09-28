@@ -1,3 +1,4 @@
+import { strings } from "@/i18n";
 import { CURRENCIES } from "./budget";
 // Daily ECB rates through Frankfurter: no key, CORS open, read-only.
 // Rates are frozen into each expense at entry, so a later change never
@@ -62,10 +63,10 @@ export async function ilsRate(
   try {
     sheet = await loadRates(fetchImpl);
   } catch {
-    throw new Error("שער החליפין לא זמין כרגע. אפשר להזין שער ידנית.");
+    throw new Error(strings().common.errors.rateUnavailable);
   }
   const perIls = sheet.rates[currency];
   if (typeof perIls !== "number" || !Number.isFinite(perIls) || perIls <= 0)
-    throw new Error("אין שער למטבע הזה. אפשר להזין שער ידנית.");
+    throw new Error(strings().common.errors.noRate);
   return { rate: Math.round((1 / perIls) * 1e6) / 1e6, date: sheet.date };
 }

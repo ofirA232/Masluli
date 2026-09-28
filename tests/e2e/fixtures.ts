@@ -20,6 +20,7 @@ export const initialPlan: TripPlan = {
     interests: [],
     targetBudget: 3000,
     gettingAround: null,
+    language: "he",
   },
   days: [
     {
@@ -94,6 +95,8 @@ export async function setup(page: Page, authenticated = true) {
     failSave: false,
     conflict: false,
     saves: 0,
+    /** What each edge function was sent, in order. */
+    calls: [] as { name: string; body: Record<string, unknown> }[],
   };
   const project = "planatrip-test";
   const user = {
@@ -149,6 +152,11 @@ export async function setup(page: Page, authenticated = true) {
         status,
         contentType: "application/json",
         body: JSON.stringify(body),
+      });
+    if (path.includes("/functions/v1/") && req.method() === "POST")
+      state.calls.push({
+        name: path.split("/functions/v1/")[1],
+        body: req.postDataJSON() ?? {},
       });
     if (path.includes("/auth/v1/user")) return respond(user);
     if (path.includes("/auth/v1/token")) return respond(session);

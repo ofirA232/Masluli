@@ -105,6 +105,11 @@ export interface TripMetadata {
   targetBudget: number | null;
   /** How this trip gets around; falls back to the traveller's profile. */
   gettingAround: GettingAround | null;
+  /**
+   * The language the trip is written in: the site's when it was created. The
+   * AI keeps writing in it, whatever language the site is viewed in later.
+   */
+  language: "he" | "en";
 }
 /** equal: keys are the participants (empty = everyone); custom: amounts in `currency`. */
 export interface ExpenseSplit {

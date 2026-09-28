@@ -55,7 +55,6 @@
     @apply bg-background text-foreground;
     margin: 0;
     font-family: Heebo, sans-serif;
-    direction: rtl;
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: none;
@@ -217,6 +216,23 @@
   height: 42px;
   padding-inline: 18px;
 }
+/* The language switch: a small pill showing the other language. */
+.lang-switch {
+  display: inline-grid;
+  place-items: center;
+  height: 36px;
+  min-width: 40px;
+  padding-inline: 10px;
+  border-radius: 12px;
+  background: var(--mint-soft);
+  color: var(--slate);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.tone-mint .lang-switch {
+  background: rgb(255 255 255 / 0.6);
+}
 .login-link {
   font-size: 14px;
   font-weight: 600;
@@ -240,6 +256,30 @@
   display: none;
 }
 
+/* ---------- Direction ----------
+   The layout is written right to left for Hebrew, in logical properties, so
+   English (dir="ltr") mirrors it. Movement toward "forward" multiplies by
+   --flip, and arrow icons turn around; the date picker handles its own. */
+:root {
+  --flip: 1;
+}
+[dir="ltr"] {
+  --flip: -1;
+}
+[dir="ltr"]
+  :is(
+    .lucide-arrow-left,
+    .lucide-arrow-right,
+    .lucide-arrow-up-left,
+    .lucide-chevron-left,
+    .lucide-chevron-right
+  ):not(.rdp *) {
+  transform: scaleX(-1);
+}
+/* A counter reads "− 2 +" in English; Hebrew keeps plus on its reading side. */
+[dir="ltr"] .stepper {
+  flex-direction: row-reverse;
+}
 /* ---------- Motion tokens: zoox.com's "Motion Bible" ----------
    One in-out curve (vinnieInOut: quick start, long soft settle) for anything
    that moves or changes on screen, a heavy ease-out for things arriving
@@ -376,6 +416,9 @@
 [data-motion] .wipe[data-reveal]:not([data-revealed]) {
   clip-path: inset(0 0 0 100% round var(--wipe-radius, var(--radius-card)));
 }
+[dir="ltr"] [data-motion] .wipe[data-reveal]:not([data-revealed]) {
+  clip-path: inset(0 100% 0 0 round var(--wipe-radius, var(--radius-card)));
+}
 /* Photos sit 10% oversized in their frame and drift against the scroll.
    Frames use overflow: clip; hidden would make them scroll containers and
    pin view() to a box that never scrolls. */
@@ -434,18 +477,18 @@
   /* Overlaps the label so the resting layout matches a single chevron. */
   margin-inline-end: -24px;
   opacity: 0;
-  transform: translateX(30px);
+  transform: translateX(calc(30px * var(--flip)));
 }
 .cta-arrow:focus-visible .cta-icon-in {
   opacity: 1;
   transform: none;
 }
 .cta-arrow:focus-visible .cta-text {
-  transform: translateX(-24px);
+  transform: translateX(calc(-24px * var(--flip)));
 }
 .cta-arrow:focus-visible .cta-icon-out {
   opacity: 0;
-  transform: translateX(-30px);
+  transform: translateX(calc(-30px * var(--flip)));
 }
 
 /* ---------- Home: mint hero with display type ---------- */
@@ -767,7 +810,7 @@
 .suggestions button {
   display: flex;
   align-items: center;
-  text-align: right;
+  text-align: start;
   gap: 6px;
   font-size: 14px;
   padding: 11px 12px;
@@ -779,7 +822,7 @@
   font-size: 11px;
   color: var(--ink-70);
   padding: 5px;
-  text-align: left;
+  text-align: end;
 }
 
 /* ---------- Section headings ---------- */
@@ -1085,8 +1128,8 @@
   width: fit-content;
   margin-top: 56px;
   /* The wordmark is dir="ltr", so logical margins would flip; pin it left. */
-  margin-left: max(26px, calc((100% - 1160px) / 2));
-  margin-right: auto;
+  margin-inline-end: max(26px, calc((100% - 1160px) / 2));
+  margin-inline-start: auto;
   color: #fff;
   font-size: clamp(36px, 5vw, 64px);
   font-weight: 300;
@@ -1383,7 +1426,7 @@
 .trip-days {
   position: absolute;
   bottom: 16px;
-  right: 16px;
+  inset-inline-start: 16px;
   background: rgb(255 255 255 / 0.9);
   padding: 6px 12px;
   border-radius: 20px;
@@ -1392,7 +1435,7 @@
 }
 .destination-arrow {
   position: absolute;
-  left: 16px;
+  inset-inline-end: 16px;
   top: 16px;
   height: 36px;
   width: 36px;
@@ -1563,11 +1606,11 @@
     transform: none;
   }
   .cta-arrow:hover .cta-text {
-    transform: translateX(-24px);
+    transform: translateX(calc(-24px * var(--flip)));
   }
   .cta-arrow:hover .cta-icon-out {
     opacity: 0;
-    transform: translateX(-30px);
+    transform: translateX(calc(-30px * var(--flip)));
   }
   .suggestions button:hover {
     background: var(--mint-soft);
@@ -1578,7 +1621,7 @@
     scale: 1.03;
   }
   .saved-trip-card:hover .destination-arrow {
-    transform: translateX(-3px);
+    transform: translateX(calc(-3px * var(--flip)));
   }
   .interests button:not(.selected):hover {
     background: var(--mint);
@@ -1696,7 +1739,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  text-align: right;
+  text-align: start;
   padding: 11px;
   border-radius: 12px;
   font-size: 12px;
@@ -1725,7 +1768,7 @@
   align-items: center;
   gap: 9px;
   width: 100%;
-  text-align: right;
+  text-align: start;
   padding: 9px 12px;
   border-radius: 12px;
   font-size: 12px;
@@ -1809,8 +1852,8 @@
 .trip-cover > div:last-of-type {
   position: absolute;
   bottom: 26px;
-  right: 28px;
-  left: 25px;
+  inset-inline-start: 28px;
+  inset-inline-end: 25px;
 }
 .trip-cover .eyebrow {
   font-size: 11px;
@@ -1832,7 +1875,7 @@
 }
 .trip-cover > button {
   position: absolute;
-  left: 17px;
+  inset-inline-end: 17px;
   top: 17px;
   height: 32px;
   width: 32px;
@@ -2025,7 +2068,7 @@
   flex: 1;
 }
 .activity-title {
-  text-align: right;
+  text-align: start;
   font-size: 15px;
   font-weight: 500;
   line-height: 1.4;
@@ -2153,7 +2196,7 @@
 }
 .image-credit {
   padding: 4px 10px;
-  text-align: left;
+  text-align: end;
   font-size: 11px;
   color: var(--ink-70);
   line-height: 1.7;
@@ -2734,7 +2777,7 @@
   align-items: center;
   gap: 9px;
   padding: 10px;
-  text-align: right;
+  text-align: start;
   width: 100%;
   color: var(--ink-70);
   border-radius: 8px;
@@ -2755,7 +2798,7 @@
   color: var(--ink-70);
 }
 .place-results > small {
-  text-align: left;
+  text-align: end;
   padding: 5px;
   color: var(--ink-70);
 }
@@ -3067,7 +3110,7 @@
   }
   .footer-wordmark {
     margin-top: 36px;
-    margin-left: 20px;
+    margin-inline-end: 20px;
   }
   .new-trip-page {
     padding-block: 20px 64px;
@@ -3211,7 +3254,7 @@
   }
   .trip-cover > div:last-of-type {
     bottom: 21px;
-    right: 19px;
+    inset-inline-start: 19px;
   }
   .trip-cover h1 {
     font-size: 25px;

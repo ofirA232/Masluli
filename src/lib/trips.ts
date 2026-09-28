@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizePlaceCache } from "./place-cache";
+import { currentLang, strings, type Lang } from "@/i18n";
 import type {
   Activity,
   Category,
@@ -16,13 +17,18 @@ import type {
   TripMetadata,
 } from "@/types/itinerary";
 
-export const categories: Record<Category, string> = {
-  attraction: "אטרקציה",
-  restaurant: "אוכל ושתייה",
-  transport: "תחבורה",
-  accommodation: "לינה",
-  shopping: "קניות",
-  entertainment: "בילוי",
+// Labels by language live in i18n (common). These Hebrew maps remain for code
+// that only needs the keys; show text through labels(lang) or useT().
+export const categories: Record<Category, string> = strings("he").common
+  .categories;
+/** Category, transport and lodging names in a language. */
+export const labels = (lang: Lang = currentLang()) => {
+  const c = strings(lang).common;
+  return {
+    categories: c.categories as Record<Category, string>,
+    transportModes: c.transportModes as Record<TransportMode, string>,
+    lodgingKinds: c.lodgingKinds as Record<LodgingKind, string>,
+  };
 };
 export const dayColors = [
   "#de604b",
@@ -33,8 +39,8 @@ export const dayColors = [
   "#b75f8a",
 ];
 export const uid = () => crypto.randomUUID();
-export const money = (value: number) =>
-  new Intl.NumberFormat("he-IL", {
+export const money = (value: number, lang: Lang = currentLang()) =>
+  new Intl.NumberFormat(strings(lang).common.locale, {
     style: "currency",
     currency: "ILS",
     minimumFractionDigits: 0,
@@ -67,43 +73,56 @@ export function dayDate(start: string | null, index: number): string | null {
     .toISOString()
     .slice(0, 10);
 }
-export function formatDate(value: string | null, weekday = false) {
+export function formatDate(
+  value: string | null,
+  weekday = false,
+  lang: Lang = currentLang(),
+) {
+  const words = strings(lang).common;
   return value
-    ? new Intl.DateTimeFormat("he-IL", {
+    ? new Intl.DateTimeFormat(words.locale, {
         day: "numeric",
         month: "short",
         ...(weekday ? { weekday: "long" as const } : {}),
       }).format(new Date(`${value}T12:00:00`))
-    : "התאריכים עוד פתוחים";
+    : words.openDates;
 }
-export const requestSchema = z
-  .object({
-    destination: z.string().trim().min(2, "נא להזין יעד").max(100),
-    startDate: z.string().refine((v) => !!dateOnly(v), "נא לבחור תאריך התחלה"),
-    endDate: z.string().refine((v) => !!dateOnly(v), "נא לבחור תאריך סיום"),
-    travelers: z.number().int().min(1).max(20),
-    budget: z
-      .string()
-      .optional()
-      .refine(
-        (v) => !v || (Number.isFinite(Number(v)) && Number(v) >= 0),
-        "התקציב חייב להיות סכום חיובי",
-      ),
-    interests: z.array(z.string()).max(10).optional(),
-    gettingAround: z.enum(["foot", "car", "mixed"]).optional(),
-  })
-  .refine(
-    (v) =>
-      dayCount(v.startDate, v.endDate) >= 1 &&
-      dayCount(v.startDate, v.endDate) <= 30,
-    { message: "אפשר לתכנן טיול של יום אחד עד 30 ימים", path: ["endDate"] },
-  );
-export function createPlan(request: ItineraryRequest): TripPlan {
-  const input = requestSchema.parse(request);
+/** The new-trip form's rules, with messages in a language. */
+export function requestSchemaFor(lang: Lang = currentLang()) {
+  const m = strings(lang).common.request;
+  return z
+    .object({
+      destination: z.string().trim().min(2, m.destination).max(100),
+      startDate: z.string().refine((v) => !!dateOnly(v), m.startDate),
+      endDate: z.string().refine((v) => !!dateOnly(v), m.endDate),
+      travelers: z.number().int().min(1).max(20),
+      budget: z
+        .string()
+        .optional()
+        .refine(
+          (v) => !v || (Number.isFinite(Number(v)) && Number(v) >= 0),
+          m.budget,
+        ),
+      interests: z.array(z.string()).max(10).optional(),
+      gettingAround: z.enum(["foot", "car", "mixed"]).optional(),
+    })
+    .refine(
+      (v) =>
+        dayCount(v.startDate, v.endDate) >= 1 &&
+        dayCount(v.startDate, v.endDate) <= 30,
+      { message: m.length, path: ["endDate"] },
+    );
+}
+export const requestSchema = requestSchemaFor("he");
+export function createPlan(
+  request: ItineraryRequest,
+  lang: Lang = currentLang(),
+): TripPlan {
+  const input = requestSchemaFor(lang).parse(request);
   return {
     version: 2,
     metadata: {
-      title: `הטיול שלי ל${input.destination}`,
+      title: strings(lang).common.tripTitle(input.destination),
       destination: input.destination,
       startDate: input.startDate,
       endDate: input.endDate,
@@ -112,6 +131,7 @@ export function createPlan(request: ItineraryRequest): TripPlan {
       interests: input.interests || [],
       targetBudget: input.budget ? Number(input.budget) : null,
       gettingAround: input.gettingAround ?? null,
+      language: lang,
     },
     days: Array.from(
       { length: dayCount(input.startDate, input.endDate) },
@@ -150,20 +170,10 @@ export function normalizeEstimate(value: unknown): Estimate | null {
     currency: "ILS",
   };
 }
-export const transportModes: Record<TransportMode, string> = {
-  flight: "טיסה",
-  train: "רכבת",
-  bus: "אוטובוס",
-  car: "רכב",
-  ferry: "מעבורת",
-  other: "אחר",
-};
-export const lodgingKinds: Record<LodgingKind, string> = {
-  hotel: "מלון",
-  apartment: "דירה",
-  hostel: "הוסטל",
-  other: "אחר",
-};
+export const transportModes: Record<TransportMode, string> = strings("he")
+  .common.transportModes;
+export const lodgingKinds: Record<LodgingKind, string> = strings("he").common
+  .lodgingKinds;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const clock = (v: unknown) =>
   typeof v === "string" && HHMM.test(v) ? v : "";
@@ -421,10 +431,13 @@ export function normalizePlan(value: unknown, destination = ""): TripPlan {
       : []
     ).map(activity),
   }));
+  // Trips from before the English site were all written in Hebrew.
+  const language: Lang = meta.language === "en" ? "en" : "he";
   const plan: TripPlan = {
     version: 2,
     metadata: {
-      title: str(meta.title) || `הטיול שלי ל${destination}`,
+      title:
+        str(meta.title) || strings(language).common.tripTitle(destination),
       destination: str(meta.destination) || destination,
       startDate: dateOnly(meta.startDate),
       endDate: dateOnly(meta.endDate),
@@ -439,6 +452,7 @@ export function normalizePlan(value: unknown, destination = ""): TripPlan {
       gettingAround: ["foot", "car", "mixed"].includes(str(meta.gettingAround))
         ? (str(meta.gettingAround) as TripMetadata["gettingAround"])
         : null,
+      language,
     },
     days: days.length ? days : [{ day_number: 1, activities: [] }],
     saved_places: (Array.isArray(raw.saved_places) ? raw.saved_places : []).map(

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Loader2, MessageSquareText, Send, Undo2 } from "lucide-react";
 import { Button } from "./ui/button";
 import type { RefineSummary } from "@/types/itinerary";
+import { useT } from "@/i18n";
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "error";
@@ -10,11 +11,6 @@ export interface ChatMessage {
   canUndo?: boolean;
   undone?: boolean;
 }
-const examples = [
-  "תרגיע את היום הזה",
-  "תוסיף מסעדה מקומית לצהריים",
-  "תחליף את הפעילות האחרונה במשהו לילדים",
-];
 export function RefinePanel({
   messages,
   busy,
@@ -29,6 +25,7 @@ export function RefinePanel({
   onUndo: (id: string) => void;
 }) {
   const [text, setText] = useState("");
+  const words = useT().trip.refine;
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const value = text.trim();
@@ -37,14 +34,14 @@ export function RefinePanel({
     setText("");
   };
   return (
-    <section className="refine-panel" aria-label="עידון המסלול בשיחה">
+    <section className="refine-panel" aria-label={words.label}>
       <div className="refine-heading">
         <MessageSquareText size={16} />
-        <strong>לשנות משהו? פשוט תגידו</strong>
+        <strong>{words.heading}</strong>
       </div>
       {messages.length === 0 && (
         <div className="refine-examples">
-          {examples.map((x) => (
+          {words.examples.map((x) => (
             <button
               type="button"
               key={x}
@@ -60,11 +57,14 @@ export function RefinePanel({
         <div className="refine-messages" role="log" aria-live="polite">
           {messages.map((m) => (
             <div key={m.id} className={`refine-message ${m.role}`}>
-              <p>{m.text}</p>
+              <p dir="auto">{m.text}</p>
               {m.summary && (
                 <small>
-                  נוספו {m.summary.added} · הוסרו {m.summary.removed} · עודכנו{" "}
-                  {m.summary.changed}
+                  {words.summary(
+                    m.summary.added,
+                    m.summary.removed,
+                    m.summary.changed,
+                  )}
                 </small>
               )}
               {m.canUndo && !m.undone && (
@@ -72,27 +72,27 @@ export function RefinePanel({
                   type="button"
                   className="refine-undo"
                   onClick={() => onUndo(m.id)}
-                  title="מחזיר את המסלול למצב שלפני השינוי"
+                  title={words.undoTitle}
                 >
                   <Undo2 size={13} />
-                  בטל
+                  {words.undo}
                 </button>
               )}
-              {m.undone && <small>השינוי בוטל</small>}
+              {m.undone && <small>{words.undone}</small>}
             </div>
           ))}
           {busy && (
             <div className="refine-message assistant pending">
               <Loader2 size={14} className="animate-spin" />
-              מעדכנים את המסלול…
+              {words.busy}
             </div>
           )}
         </div>
       )}
       <form className="refine-input" onSubmit={submit}>
         <input
-          aria-label="מה לשנות במסלול"
-          placeholder="מה לשנות? למשל: תרגיע את יום 2, או תוסיף מוזיאון לילדים"
+          aria-label={words.inputLabel}
+          placeholder={words.placeholder}
           maxLength={500}
           enterKeyHint="send"
           value={text}
@@ -105,7 +105,7 @@ export function RefinePanel({
           disabled={disabled || busy || !text.trim()}
         >
           {busy ? <Loader2 className="animate-spin" /> : <Send size={15} />}
-          שליחה
+          {words.send}
         </Button>
       </form>
     </section>

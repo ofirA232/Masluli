@@ -41,12 +41,16 @@ async function englishName(query: string) {
     return query;
   }
 }
+const noPhoto = {
+  he: "תמונת היעד אינה זמינה כרגע",
+  en: "The destination photo isn't available right now",
+};
 Deno.serve((req) =>
   handler(req, async (body) => {
     const id = await userId(req),
       query = textInput(body.query);
     const key = Deno.env.get("UNSPLASH_ACCESS_KEY");
-    if (!key) throw new ApiError(503, "תמונת היעד אינה זמינה כרגע");
+    if (!key) throw new ApiError(503, noPhoto);
     await quota(id, "unsplash", 30, 3600);
     const headers = {
       Authorization: `Client-ID ${key}`,
@@ -57,7 +61,7 @@ Deno.serve((req) =>
       `https://api.unsplash.com/search/photos?query=${encodeURIComponent(term)}&per_page=1&orientation=landscape`,
       { headers, signal: AbortSignal.timeout(10000) },
     );
-    if (!response.ok) throw new ApiError(502, "תמונת היעד אינה זמינה כרגע");
+    if (!response.ok) throw new ApiError(502, noPhoto);
     const data = await response.json(),
       photo = data.results?.[0];
     if (!photo) return { imageUrl: null, placeholder: true };

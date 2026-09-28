@@ -19,12 +19,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { normalizePlan, formatDate } from "@/lib/trips";
 import { destinationImage } from "@/lib/destinations";
 import type { TripRecord } from "@/types/itinerary";
+import { useLang, useT } from "@/i18n";
 export default function MyTrips() {
   const { user, loading } = useAuthState();
+  const words = useT().myTrips,
+    { lang } = useLang();
   const [trips, setTrips] = useState<TripRecord[]>([]),
     [busy, setBusy] = useState(true),
     [query, setQuery] = useState(""),
-    [error, setError] = useState(""),
+    // A key into the page's words, so the message follows the language.
+    [error, setError] = useState<"" | "loadFailed" | "deleteFailed">(""),
     [deleting, setDeleting] = useState<string | null>(null);
   useEffect(() => {
     if (loading) return;
@@ -39,7 +43,7 @@ export default function MyTrips() {
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (!active) return;
-        if (error) setError("לא הצלחנו לטעון את הטיולים. נסו לרענן את העמוד.");
+        if (error) setError("loadFailed");
         else setTrips(data || []);
         setBusy(false);
       });
@@ -48,14 +52,14 @@ export default function MyTrips() {
     };
   }, [user, loading]);
   const remove = async (trip: TripRecord) => {
-    if (!window.confirm("למחוק את הטיול? לא ניתן לבטל את המחיקה.")) return;
+    if (!window.confirm(words.deleteConfirm)) return;
     setDeleting(trip.id);
     const { data, error } = await supabase
       .from("trips")
       .delete()
       .eq("id", trip.id)
       .select("id");
-    if (error || !data?.length) setError("המחיקה נכשלה. אפשר לנסות שוב.");
+    if (error || !data?.length) setError("deleteFailed");
     else setTrips((v) => v.filter((t) => t.id !== trip.id));
     setDeleting(null);
   };
@@ -71,16 +75,16 @@ export default function MyTrips() {
       <main className="section-wrap my-trips-page">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">המקומות שלכם. הסיפורים שלכם.</span>
+            <span className="eyebrow">{words.eyebrow}</span>
             <h1>
-              <SplitWords text="הטיולים שלי" />
+              <SplitWords text={words.title} />
             </h1>
-            <p>כל ההרפתקאות, אלה שהיו ואלה שעוד בדרך.</p>
+            <p>{words.lead}</p>
           </div>
           <Button asChild>
             <Link to="/trip/new">
               <Plus size={18} />
-              מתכננים טיול חדש
+              {words.newTrip}
             </Link>
           </Button>
         </div>
@@ -91,10 +95,10 @@ export default function MyTrips() {
               src="/images/illustrations/route.webp"
               alt=""
             />
-            <h2>הטיולים שלכם מחכים כאן</h2>
-            <p>היכנסו לחשבון כדי לשמור מסלולים ולחזור אליהם בכל זמן.</p>
+            <h2>{words.signedOut.title}</h2>
+            <p>{words.signedOut.text}</p>
             <Button asChild>
-              <Link to="/auth?next=%2Fmy-trips">כניסה לחשבון</Link>
+              <Link to="/auth?next=%2Fmy-trips">{words.signedOut.cta}</Link>
             </Button>
           </div>
         ) : (
@@ -102,23 +106,23 @@ export default function MyTrips() {
             <label className="trips-search">
               <Search size={19} />
               <input
-                aria-label="חיפוש בטיולים"
-                placeholder="חיפוש לפי שם הטיול או היעד…"
+                aria-label={words.searchLabel}
+                placeholder={words.searchPlaceholder}
                 enterKeyHint="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              <span>{filtered.length} טיולים</span>
+              <span>{words.count(filtered.length)}</span>
             </label>
             {error && (
               <p role="alert" className="form-error">
-                {error}
+                {words[error]}
               </p>
             )}
             {busy ? (
               <div className="empty-state">
                 <Loader2 className="animate-spin" />
-                טוענים את ההרפתקאות שלכם…
+                {words.loading}
               </div>
             ) : (
               <div className="trip-grid">
@@ -143,7 +147,7 @@ export default function MyTrips() {
                           </div>
                         )}
                         <span className="trip-days">
-                          {p.days.length} ימים של אפשרויות
+                          {words.days(p.days.length)}
                         </span>
                         <span className="destination-arrow">
                           <ArrowUpLeft size={20} />
@@ -151,7 +155,7 @@ export default function MyTrips() {
                       </Link>
                       {p.cover && (
                         <div className="image-credit">
-                          צילום:{" "}
+                          {words.photoBy}{" "}
                           <a
                             href={p.cover.photographerUrl}
                             target="_blank"
@@ -180,13 +184,14 @@ export default function MyTrips() {
                         <div className="saved-trip-meta">
                           <span>
                             <CalendarDays size={14} />
-                            {formatDate(p.metadata.startDate)}
+                            {formatDate(p.metadata.startDate, false, lang)}
                             {p.metadata.endDate
-                              ? " — " + formatDate(p.metadata.endDate)
+                              ? " — " +
+                                formatDate(p.metadata.endDate, false, lang)
                               : ""}
                           </span>
                           <button
-                            aria-label={`מחיקת ${p.metadata.title}`}
+                            aria-label={words.deleteTrip(p.metadata.title)}
                             disabled={deleting === t.id}
                             onClick={() => void remove(t)}
                           >
@@ -211,13 +216,13 @@ export default function MyTrips() {
                   <span>
                     <Plus size={29} />
                   </span>
-                  <h3>לאן בפעם הבאה?</h3>
-                  <p>עוד סיפור מתחיל כאן</p>
+                  <h3>{words.nextTitle}</h3>
+                  <p>{words.nextText}</p>
                 </Link>
               </div>
             )}
             {!busy && query && !filtered.length && (
-              <p className="muted mt-6">לא נמצאו טיולים שתואמים לחיפוש.</p>
+              <p className="muted mt-6">{words.noResults}</p>
             )}
           </>
         )}

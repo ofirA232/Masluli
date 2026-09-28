@@ -6,54 +6,73 @@ import type {
   Pace,
   TravelPreferences,
 } from "@/types/profile";
+import { currentLang, strings as words, type Lang } from "@/i18n";
 // Pure module (no Supabase import) so it is unit-testable and shared by the
 // form and the hook. Keep the allowlists in sync with
 // supabase/functions/_shared/profile.ts.
-export const interestOptions = [
-  "אוכל",
-  "טבע",
-  "היסטוריה",
-  "אמנות",
-  "קניות",
-  "חופים",
-  "הרפתקאות",
-  "רוגע",
-  "חיי לילה",
-  "משפחות",
+const paces: Pace[] = ["relaxed", "balanced", "packed"];
+const budgets: BudgetLevel[] = ["budget", "moderate", "luxury"];
+const mobilities: Mobility[] = ["full", "light", "accessible"];
+const gettingArounds: GettingAround[] = ["foot", "car", "mixed"];
+const foods: FoodStyle[] = [
+  "street",
+  "local",
+  "fine",
+  "vegetarian",
+  "vegan",
+  "kosher",
 ];
-export const paceOptions: { value: Pace; label: string }[] = [
-  { value: "relaxed", label: "רגוע" },
-  { value: "balanced", label: "מאוזן" },
-  { value: "packed", label: "עמוס" },
-];
-export const budgetOptions: { value: BudgetLevel; label: string }[] = [
-  { value: "budget", label: "חסכוני" },
-  { value: "moderate", label: "בינוני" },
-  { value: "luxury", label: "מפנק" },
-];
-export const mobilityOptions: { value: Mobility; label: string }[] = [
-  { value: "full", label: "בלי מגבלה" },
-  { value: "light", label: "הליכות קצרות" },
-  { value: "accessible", label: "נגישות מלאה" },
-];
-export const gettingAroundOptions: { value: GettingAround; label: string }[] = [
-  { value: "foot", label: "ברגל ובתחבורה ציבורית" },
-  { value: "car", label: "ברכב" },
-  { value: "mixed", label: "גם וגם" },
-];
-export const foodOptions: { value: FoodStyle; label: string }[] = [
-  { value: "street", label: "אוכל רחוב" },
-  { value: "local", label: "מקומי ואותנטי" },
-  { value: "fine", label: "מסעדות שף" },
-  { value: "vegetarian", label: "צמחוני" },
-  { value: "vegan", label: "טבעוני" },
-  { value: "kosher", label: "כשר" },
-];
-const oneOf = <T extends string>(
-  options: { value: T }[],
-  value: unknown,
-): T | null =>
-  options.some((o) => o.value === value) ? (value as T) : null;
+// Interests are stored (in profiles and trip requests, and sent to the AI) as
+// these Hebrew words, in every language; only their label is translated.
+const interestValues = {
+  food: "אוכל",
+  nature: "טבע",
+  history: "היסטוריה",
+  art: "אמנות",
+  shopping: "קניות",
+  beaches: "חופים",
+  adventure: "הרפתקאות",
+  calm: "רוגע",
+  nightlife: "חיי לילה",
+  families: "משפחות",
+};
+type InterestKey = keyof typeof interestValues;
+export type PreferenceOption<T extends string = string> = {
+  value: T;
+  label: string;
+};
+const labelled = <T extends string>(
+  values: T[],
+  labels: Record<T, string>,
+): PreferenceOption<T>[] =>
+  values.map((value) => ({ value, label: labels[value] }));
+/** Every preference choice, stored value first, labelled in a language. */
+export function preferenceOptions(lang: Lang = currentLang()) {
+  const labels = words(lang).profile.options;
+  return {
+    interests: (Object.keys(interestValues) as InterestKey[]).map(
+      (key): PreferenceOption => ({
+        value: interestValues[key],
+        label: labels.interests[key],
+      }),
+    ),
+    pace: labelled(paces, labels.pace),
+    budget: labelled(budgets, labels.budget),
+    mobility: labelled(mobilities, labels.mobility),
+    gettingAround: labelled(gettingArounds, labels.gettingAround),
+    food: labelled(foods, labels.food),
+  };
+}
+// The Hebrew lists, as they were before the site spoke English.
+const hebrew = preferenceOptions("he");
+export const interestOptions: string[] = hebrew.interests.map((o) => o.value);
+export const paceOptions = hebrew.pace;
+export const budgetOptions = hebrew.budget;
+export const mobilityOptions = hebrew.mobility;
+export const gettingAroundOptions = hebrew.gettingAround;
+export const foodOptions = hebrew.food;
+const oneOf = <T extends string>(values: T[], value: unknown): T | null =>
+  values.includes(value as T) ? (value as T) : null;
 const strings = (v: unknown, count: number, length: number) =>
   Array.isArray(v)
     ? Array.from(
@@ -82,14 +101,14 @@ export function normalizePreferences(value: unknown): TravelPreferences {
       ? (value as Record<string, unknown>)
       : {};
   return {
-    pace: oneOf(paceOptions, p.pace),
+    pace: oneOf(paces, p.pace),
     food: strings(p.food, 6, 20).filter((f): f is FoodStyle =>
-      foodOptions.some((o) => o.value === f),
+      foods.includes(f as FoodStyle),
     ),
-    budget: oneOf(budgetOptions, p.budget),
+    budget: oneOf(budgets, p.budget),
     kids: p.kids === true,
-    mobility: oneOf(mobilityOptions, p.mobility),
-    getting_around: oneOf(gettingAroundOptions, p.getting_around),
+    mobility: oneOf(mobilities, p.mobility),
+    getting_around: oneOf(gettingArounds, p.getting_around),
     interests: strings(p.interests, 10, 50),
     pet_peeves:
       typeof p.pet_peeves === "string" ? p.pet_peeves.trim().slice(0, 300) : "",

@@ -10,6 +10,7 @@ import {
 import { config } from "@/lib/config";
 import type { Coordinates } from "@/types/itinerary";
 import type { Here, LocationStatus } from "@/hooks/useLiveLocation";
+import { currentLang, useT } from "@/i18n";
 let loader: Promise<void> | undefined;
 let authFailed = false;
 const reducedMotion = () =>
@@ -31,7 +32,7 @@ function loadMaps() {
       const callback = "__planatripMapsReady";
       const timer = setTimeout(() => {
         loader = undefined;
-        reject(new Error("טעינת המפה נמשכת יותר מהרגיל. נסו לרענן."));
+        reject(new Error("slow"));
       }, 20000);
       Object.assign(window, {
         [callback]: () => {
@@ -39,12 +40,12 @@ function loadMaps() {
           resolve();
         },
       });
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsKey)}&callback=${callback}&loading=async&language=he&libraries=geometry`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(config.mapsKey)}&callback=${callback}&loading=async&language=${currentLang()}&libraries=geometry`;
       script.async = true;
       script.onerror = () => {
         clearTimeout(timer);
         loader = undefined;
-        reject(new Error("לא ניתן לטעון את המפה כרגע"));
+        reject(new Error("failed"));
       };
       document.head.append(script);
     });
@@ -82,16 +83,18 @@ export default function MapComponent({
     meDot = useRef<google.maps.Marker>(),
     meRing = useRef<google.maps.Circle>(),
     flyToMe = useRef(false);
+  const words = useT().trip.map,
+    youAreHere = words.you;
   const [ready, setReady] = useState(false),
-    [error, setError] = useState("");
+    // Kept as a reason, so the message follows the language.
+    [error, setError] = useState<"" | "slow" | "failed" | "auth">("");
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
   const lastSelected = useRef(selectedActivityId),
     clickedMarker = useRef<string>();
   useEffect(() => {
     if (!config.mapsKey) return;
-    const fail = () =>
-      setError("שירות המפות אינו זמין כרגע. אפשר להמשיך לערוך את הטיול.");
+    const fail = () => setError("auth");
     window.addEventListener("planatrip:maps-auth-failure", fail);
     if (authFailed) fail();
     let active = true;
@@ -110,7 +113,7 @@ export default function MapComponent({
         setReady(true);
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (active) setError(e?.message === "slow" ? "slow" : "failed");
       });
     return () => {
       window.removeEventListener("planatrip:maps-auth-failure", fail);
@@ -237,7 +240,6 @@ export default function MapComponent({
       meDot.current = new google.maps.Marker({
         map: map.current,
         clickable: false,
-        title: "המיקום שלכם",
         zIndex: google.maps.Marker.MAX_ZINDEX + 1,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
@@ -249,6 +251,7 @@ export default function MapComponent({
         },
       });
     }
+    meDot.current.setTitle(youAreHere);
     meDot.current.setPosition(position);
     meRing.current?.setCenter(position);
     meRing.current?.setRadius(Math.min(here.accuracy, 2_000));
@@ -257,7 +260,7 @@ export default function MapComponent({
       map.current.panTo(position);
       if ((map.current.getZoom() ?? 0) < 15) map.current.setZoom(15);
     }
-  }, [here, ready]);
+  }, [here, ready, youAreHere]);
   const locate = () => {
     if (here && map.current) {
       map.current.panTo({ lat: here.lat, lng: here.lng });
@@ -275,11 +278,8 @@ export default function MapComponent({
           <span>
             <MapPin size={30} />
           </span>
-          <h3>{error ? "המפה לא נטענה" : "כל המקומות שלכם, על מפה אחת"}</h3>
-          <p>
-            {error ||
-              "תצוגת המפה תהיה זמינה לאחר חיבור שירות המפות. אפשר להמשיך לתכנן ולשמור את הטיול."}
-          </p>
+          <h3>{error ? words.notLoaded : words.placeholderTitle}</h3>
+          <p>{error ? words[error] : words.placeholderText}</p>
           <Navigation size={20} />
         </div>
       </div>
@@ -290,12 +290,12 @@ export default function MapComponent({
       {!ready && (
         <div className="map-loading">
           <Loader2 className="animate-spin" />
-          טוענים מפה…
+          {words.loading}
         </div>
       )}
       {ready && !activities.length && (
         <div className="map-empty-message">
-          הוסיפו מקום מחיפוש כדי לראות אותו על המפה
+          {words.empty}
         </div>
       )}
       {ready && onLocate && (
@@ -303,14 +303,12 @@ export default function MapComponent({
           type="button"
           className={`locate-me is-${locationStatus}`}
           aria-label={
-            locationStatus === "denied"
-              ? "הגישה למיקום חסומה"
-              : "הצגת המיקום שלי"
+            locationStatus === "denied" ? words.locationBlocked : words.showMe
           }
           title={
             locationStatus === "denied"
-              ? "הגישה למיקום חסומה בהגדרות הדפדפן"
-              : "איפה אני?"
+              ? words.locationBlockedHint
+              : words.whereAmI
           }
           onClick={locate}
         >

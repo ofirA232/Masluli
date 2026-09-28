@@ -32,6 +32,7 @@ import {
   totalsByTraveler,
 } from "@/lib/budget";
 import { ilsRate } from "@/lib/fx";
+import { useLang, useT } from "@/i18n";
 import type { Category, Expense, TripPlan } from "@/types/itinerary";
 export function BudgetPanel({
   plan,
@@ -42,21 +43,29 @@ export function BudgetPanel({
   edit: (next: TripPlan) => void;
   readOnly: boolean;
 }) {
+  const words = useT(),
+    t = words.budget,
+    { lang } = useLang();
   const totals = budgetTotals(plan),
     target = plan.metadata.targetBudget,
     travelers = plan.metadata.travelersList;
   const nameOf = (id: string | null) =>
-    travelers.find((t) => t.id === id)?.name || "לא צוין";
+    travelers.find((v) => v.id === id)?.name || t.notSpecified;
   const [label, setLabel] = useState(""),
     [amount, setAmount] = useState(""),
     [currency, setCurrency] = useState("ILS"),
     [rate, setRate] = useState("1"),
-    [rateHint, setRateHint] = useState(""),
+    // Kept as data, not text, so it follows a language change.
+    [rateHint, setRateHint] = useState<{
+      loading?: boolean;
+      date?: string;
+      error?: string;
+    } | null>(null),
     [category, setCategory] = useState<Category>("restaurant"),
     [activityId, setActivityId] = useState(""),
     [date, setDate] = useState(""),
     [paidBy, setPaidBy] = useState(""),
-    [who, setWho] = useState<string[]>(() => travelers.map((t) => t.id)),
+    [who, setWho] = useState<string[]>(() => travelers.map((v) => v.id)),
     [custom, setCustom] = useState(false),
     [shares, setShares] = useState<Record<string, string>>({}),
     [error, setError] = useState("");
@@ -65,18 +74,18 @@ export function BudgetPanel({
     let active = true;
     if (currency === "ILS") {
       setRate("1");
-      setRateHint("");
+      setRateHint(null);
       return;
     }
-    setRateHint("מחפשים שער…");
+    setRateHint({ loading: true });
     ilsRate(currency)
       .then((r) => {
         if (!active) return;
         setRate(String(r.rate));
-        setRateHint(`שער ECB מ־${formatDate(r.date)}`);
+        setRateHint({ date: r.date });
       })
       .catch((e) => {
-        if (active) setRateHint(e instanceof Error ? e.message : "");
+        if (active) setRateHint({ error: e instanceof Error ? e.message : "" });
       });
     return () => {
       active = false;
@@ -102,16 +111,20 @@ export function BudgetPanel({
     )
       return;
     if (!(numericRate > 0)) {
-      setError("נא להזין שער חליפין");
+      setError(t.errors.rate);
       return;
     }
     if (!who.length) {
-      setError("בחרו לפחות מטייל אחד לחלוקה");
+      setError(t.errors.noTraveler);
       return;
     }
     if (custom && Math.abs(customSum - numericAmount) > 0.01) {
       setError(
-        `החלוקה מסתכמת ב־${customSum} במקום ${numericAmount}. נותר לחלק: ${round2(numericAmount - customSum)}`,
+        t.errors.splitMismatch(
+          customSum,
+          numericAmount,
+          round2(numericAmount - customSum),
+        ),
       );
       return;
     }
@@ -159,68 +172,66 @@ export function BudgetPanel({
           <Wallet />
         </span>
         <div>
-          <h2>מקום גם לתקציב</h2>
-          <p>תמונה ברורה של מה שמתוכנן, מה שכבר הוצאתם ומי חייב למי.</p>
+          <h2>{t.title}</h2>
+          <p>{t.intro}</p>
         </div>
       </div>
       <div className="budget-stats">
         <div>
-          <span>התקציב שלכם</span>
-          <strong>{target === null ? "עוד לא הוגדר" : money(target)}</strong>
+          <span>{t.yourBudget}</span>
+          <strong>{target === null ? t.notSetYet : money(target)}</strong>
         </div>
         <div>
-          <span>אומדן מתוכנן</span>
+          <span>{t.planned}</span>
           <strong>
             {!plan.days.some((d) => d.activities.some((a) => a.estimate))
-              ? "עדיין לא ידוע"
+              ? t.unknownYet
               : totals.min === totals.max
                 ? money(totals.min)
                 : `${money(totals.min)}–${money(totals.max)}`}
           </strong>
           <small>
-            {totals.unknown > 0
-              ? `חסרה עלות ל־${totals.unknown} תחנות`
-              : "כולל כל התחנות במסלול"}
+            {totals.unknown > 0 ? t.missingCost(totals.unknown) : t.allStops}
           </small>
         </div>
         <div>
-          <span>הוצאות בפועל</span>
+          <span>{t.actual}</span>
           <strong>{money(totals.actual)}</strong>
-          <small>כל ההוצאות מומרות לשקלים לפי השער ביום הרישום</small>
+          <small>{t.actualNote}</small>
         </div>
       </div>
       {target !== null && target > 0 && (
         <div className="budget-progress">
           <div>
-            <span>מתוך התקציב</span>
+            <span>{t.ofBudget}</span>
             <strong>{Math.round((totals.actual / target) * 100)}%</strong>
           </div>
           <progress max={target} value={Math.min(totals.actual, target)} />
           <p>
             {totals.actual > target
-              ? `חריגה של ${money(totals.actual - target)}`
-              : `נשארו ${money(target - totals.actual)} לחוויות הבאות`}
+              ? t.over(money(totals.actual - target))
+              : t.left(money(target - totals.actual))}
           </p>
         </div>
       )}
       {!readOnly && (
         <form onSubmit={add} className="expense-form">
-          <h3>מוסיפים הוצאה</h3>
+          <h3>{t.addTitle}</h3>
           <div className="editor-fields">
             <label className="field">
-              <span>על מה הוצאתם?</span>
+              <span>{t.whatFor}</span>
               <input
                 required
                 maxLength={200}
-                placeholder="למשל: ארוחת ערב"
+                placeholder={t.labelPlaceholder}
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
               />
             </label>
             <label className="field">
-              <span>סכום</span>
+              <span>{t.amount}</span>
               <input
-                aria-label="סכום הוצאה"
+                aria-label={t.amountAria}
                 required
                 type="number"
                 inputMode="decimal"
@@ -232,24 +243,24 @@ export function BudgetPanel({
               />
             </label>
             <label className="field">
-              <span>מטבע</span>
+              <span>{t.currency}</span>
               <select
-                aria-label="מטבע"
+                aria-label={t.currency}
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>
-                    {currencyLabels[c]}
+                    {currencyLabels(lang)[c]}
                   </option>
                 ))}
               </select>
             </label>
             {currency !== "ILS" && (
               <label className="field">
-                <span>שער לשקל</span>
+                <span>{t.rate}</span>
                 <input
-                  aria-label="שער לשקל"
+                  aria-label={t.rate}
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -259,30 +270,34 @@ export function BudgetPanel({
                 />
                 <small className="fx-hint">
                   {previewIls !== null ? `≈ ${money(previewIls)} · ` : ""}
-                  {rateHint}
+                  {rateHint?.loading
+                    ? t.findingRate
+                    : rateHint?.date
+                      ? t.ecbRate(formatDate(rateHint.date))
+                      : rateHint?.error}
                 </small>
               </label>
             )}
             <label className="field">
-              <span>קטגוריה</span>
+              <span>{t.category}</span>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as Category)}
               >
-                {Object.entries(categories).map(([value, text]) => (
+                {(Object.keys(categories) as Category[]).map((value) => (
                   <option key={value} value={value}>
-                    {text}
+                    {words.common.categories[value]}
                   </option>
                 ))}
               </select>
             </label>
             <label className="field">
-              <span>שיוך לתחנה (לא חובה)</span>
+              <span>{t.linkStop}</span>
               <select
                 value={activityId}
                 onChange={(e) => setActivityId(e.target.value)}
               >
-                <option value="">הוצאה כללית</option>
+                <option value="">{t.general}</option>
                 {plan.days
                   .flatMap((d) => d.activities)
                   .map((a) => (
@@ -293,25 +308,25 @@ export function BudgetPanel({
               </select>
             </label>
             <label className="field">
-              <span>תאריך</span>
+              <span>{t.date}</span>
               <input
                 type="date"
-                aria-label="תאריך ההוצאה"
+                aria-label={t.dateAria}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
             </label>
             <label className="field">
-              <span>מי שילם/ה</span>
+              <span>{t.whoPaid}</span>
               <select
-                aria-label="מי שילם"
+                aria-label={t.whoPaidAria}
                 value={paidBy}
                 onChange={(e) => setPaidBy(e.target.value)}
               >
-                <option value="">לא צוין</option>
-                {travelers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+                <option value="">{t.notSpecified}</option>
+                {travelers.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
                   </option>
                 ))}
               </select>
@@ -319,23 +334,27 @@ export function BudgetPanel({
           </div>
           {travelers.length > 1 && (
             <div className="split-block">
-              <span className="split-label">מתחלק בין</span>
-              <div className="split-chips" role="group" aria-label="חלוקה בין">
-                {travelers.map((t) => (
+              <span className="split-label">{t.splitBetween}</span>
+              <div
+                className="split-chips"
+                role="group"
+                aria-label={t.splitAria}
+              >
+                {travelers.map((v) => (
                   <button
                     type="button"
-                    key={t.id}
-                    aria-pressed={who.includes(t.id)}
-                    className={who.includes(t.id) ? "active" : ""}
+                    key={v.id}
+                    aria-pressed={who.includes(v.id)}
+                    className={who.includes(v.id) ? "active" : ""}
                     onClick={() =>
                       setWho(
-                        who.includes(t.id)
-                          ? who.filter((id) => id !== t.id)
-                          : [...who, t.id],
+                        who.includes(v.id)
+                          ? who.filter((id) => id !== v.id)
+                          : [...who, v.id],
                       )
                     }
                   >
-                    {t.name}
+                    {v.name}
                   </button>
                 ))}
               </div>
@@ -345,30 +364,30 @@ export function BudgetPanel({
                   checked={custom}
                   onChange={(e) => setCustom(e.target.checked)}
                 />
-                <span>חלוקה מותאמת (סכומים שונים)</span>
+                <span>{t.customSplit}</span>
               </label>
               {custom && (
                 <div className="custom-shares">
                   {travelers
-                    .filter((t) => who.includes(t.id))
-                    .map((t) => (
-                      <label className="field" key={t.id}>
-                        <span>{t.name}</span>
+                    .filter((v) => who.includes(v.id))
+                    .map((v) => (
+                      <label className="field" key={v.id}>
+                        <span>{v.name}</span>
                         <input
                           type="number"
                           inputMode="decimal"
                           min="0"
                           step=".01"
-                          aria-label={`חלק של ${t.name}`}
-                          value={shares[t.id] || ""}
+                          aria-label={t.shareOf(v.name)}
+                          value={shares[v.id] || ""}
                           onChange={(e) =>
-                            setShares({ ...shares, [t.id]: e.target.value })
+                            setShares({ ...shares, [v.id]: e.target.value })
                           }
                         />
                       </label>
                     ))}
                   <small>
-                    נותר לחלק:{" "}
+                    {t.leftToSplit}{" "}
                     {amount === "" ? "—" : round2(numericAmount - customSum)}{" "}
                     {currency}
                   </small>
@@ -383,16 +402,16 @@ export function BudgetPanel({
           )}
           <Button type="submit">
             <Plus size={16} />
-            הוספת הוצאה
+            {t.addExpense}
           </Button>
         </form>
       )}
       <div className="expense-list">
-        <h3>ההוצאות שלכם</h3>
+        <h3>{t.yourExpenses}</h3>
         {plan.expenses.length === 0 ? (
           <div className="small-empty">
             <ArrowDownLeft />
-            <p>עדיין אין הוצאות. התחלה טובה.</p>
+            <p>{t.noExpenses}</p>
           </div>
         ) : (
           plan.expenses.map((e) => (
@@ -403,11 +422,11 @@ export function BudgetPanel({
               <div>
                 <strong>{e.label}</strong>
                 <small>
-                  {categories[e.category]}
+                  {words.common.categories[e.category]}
                   {e.date ? ` · ${formatDate(e.date)}` : ""}
-                  {e.paidBy ? ` · שילם/ה ${nameOf(e.paidBy)}` : ""}
+                  {e.paidBy ? ` · ${t.paidBy(nameOf(e.paidBy))}` : ""}
                   {travelers.length > 1
-                    ? ` · ${expenseParticipants(e, travelers).length} מתחלקים`
+                    ? ` · ${t.sharing(expenseParticipants(e, travelers).length)}`
                     : ""}
                 </small>
               </div>
@@ -421,7 +440,7 @@ export function BudgetPanel({
               </b>
               {!readOnly && (
                 <button
-                  aria-label={`מחיקת הוצאה ${e.label}`}
+                  aria-label={t.deleteExpense(e.label)}
                   onClick={() =>
                     edit({
                       ...plan,
@@ -440,7 +459,7 @@ export function BudgetPanel({
         <div className="budget-section">
           <h3>
             <Users size={15} />
-            מי נוסע
+            {t.whoTravels}
           </h3>
           <TravelersEditor
             value={travelers}
@@ -468,14 +487,14 @@ export function BudgetPanel({
       )}
       {plan.expenses.length > 0 && travelers.length > 1 && (
         <div className="budget-section">
-          <h3>סיכום לפי מטייל</h3>
+          <h3>{t.byTraveler}</h3>
           <table className="budget-table">
             <thead>
               <tr>
-                <th>מטייל</th>
-                <th>שילם/ה</th>
-                <th>החלק</th>
-                <th>מאזן</th>
+                <th>{t.columns.traveler}</th>
+                <th>{t.columns.paid}</th>
+                <th>{t.columns.share}</th>
+                <th>{t.columns.balance}</th>
               </tr>
             </thead>
             <tbody>
@@ -499,47 +518,44 @@ export function BudgetPanel({
               ))}
             </tbody>
           </table>
-          <h3>התחשבנות</h3>
+          <h3>{t.settleUp}</h3>
           {transfers.length === 0 ? (
-            <p className="muted">הכול מאוזן.</p>
+            <p className="muted">{t.allSquare}</p>
           ) : (
             <ul className="settle-list">
-              {transfers.map((t, i) => (
+              {transfers.map((x, i) => (
                 <li key={i}>
-                  <span>{nameOf(t.from)}</span>
+                  <span>{nameOf(x.from)}</span>
+                  {/* Points "forward"; the stylesheet turns it for English. */}
                   <ArrowLeft size={13} />
-                  <span>{nameOf(t.to)}</span>
-                  <b>{money(t.amount)}</b>
+                  <span>{nameOf(x.to)}</span>
+                  <b>{money(x.amount)}</b>
                 </li>
               ))}
             </ul>
           )}
-          {unpaid > 0 && (
-            <p className="muted">
-              {unpaid} הוצאות בלי משלם/ת אינן נכללות בהתחשבנות.
-            </p>
-          )}
+          {unpaid > 0 && <p className="muted">{t.unpaidNote(unpaid)}</p>}
         </div>
       )}
       {plan.expenses.length > 0 && (
         <div className="budget-section budget-breakdown">
           <div>
-            <h3>לפי קטגוריה</h3>
+            <h3>{t.byCategory}</h3>
             <ul>
               {byCategory.map((c) => (
                 <li key={c.category}>
-                  <span>{categories[c.category]}</span>
+                  <span>{words.common.categories[c.category]}</span>
                   <b>{money(c.total)}</b>
                 </li>
               ))}
             </ul>
           </div>
           <div>
-            <h3>לפי יום</h3>
+            <h3>{t.byDay}</h3>
             <ul>
               {byDay.map((d) => (
                 <li key={d.date || "none"}>
-                  <span>{d.date ? formatDate(d.date) : "ללא תאריך"}</span>
+                  <span>{d.date ? formatDate(d.date) : t.noDate}</span>
                   <b>{money(d.total)}</b>
                 </li>
               ))}

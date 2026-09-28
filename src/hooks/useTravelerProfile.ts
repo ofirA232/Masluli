@@ -4,6 +4,7 @@ import { useAuthState } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { hasSupabase } from "@/lib/config";
+import { strings } from "@/i18n";
 import { emptyPreferences, normalizePreferences } from "@/lib/preferences";
 import type { TravelPreferences } from "@/types/profile";
 export async function loadPreferences(): Promise<{
@@ -14,7 +15,7 @@ export async function loadPreferences(): Promise<{
     .from("profiles")
     .select("preferences")
     .maybeSingle();
-  if (error) throw new Error("לא הצלחנו לטעון את ההעדפות");
+  if (error) throw new Error(strings().profile.errors.loadFailed);
   return {
     exists: !!data,
     preferences: normalizePreferences(data?.preferences),
@@ -31,7 +32,7 @@ export async function savePreferences(
       { user_id: userId, preferences: clean as unknown as Json },
       { onConflict: "user_id" },
     );
-  if (error) throw new Error("שמירת ההעדפות לא הצליחה. אפשר לנסות שוב.");
+  if (error) throw new Error(strings().profile.errors.saveFailed);
   return clean;
 }
 export function useTravelerProfile() {
@@ -47,7 +48,7 @@ export function useTravelerProfile() {
   });
   const save = useCallback(
     async (preferences: TravelPreferences) => {
-      if (!userId) throw new Error("יש להתחבר כדי לשמור העדפות");
+      if (!userId) throw new Error(strings().profile.errors.signInToSave);
       const clean = await savePreferences(userId, preferences);
       queryClient.setQueryData(["profile", userId], {
         exists: true,

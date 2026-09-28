@@ -6,38 +6,22 @@ import { SplitWords } from "@/components/SplitWords";
 import { HowItWorks } from "@/components/HowItWorks";
 import { SiteHeader, SiteFooter } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
-import { destinations, heroImage } from "@/lib/destinations";
+import { destinationsFor, heroImage } from "@/lib/destinations";
 import { TripForm } from "@/components/TripForm";
+import { useLang, useT } from "@/i18n";
 // Stagger for [data-reveal]; the CSS reads it as the transition delay.
 const delay = (ms: number) =>
   ({ "--reveal-delay": ms + "ms" }) as CSSProperties;
 const features = [
-  {
-    icon: Route,
-    title: "הדרך שלכם, בקצב שלכם",
-    text: "בנו מסלול יומי, הזיזו תחנות ותנו מקום גם לדברים שלא תכננתם.",
-    tag: "מסלול",
-  },
-  {
-    icon: MapPin,
-    title: "רואים את התמונה הגדולה",
-    text: "המקומות שמעניינים אתכם והמסלול שמחבר ביניהם, על מפה אחת.",
-    tag: "מפה",
-  },
-  {
-    icon: Wallet,
-    title: "שומרים מקום גם לתקציב",
-    text: "אומדנים והוצאות מסודרים, כדי שתדעו כמה נשאר להרפתקה הבאה.",
-    tag: "תקציב",
-  },
-  {
-    icon: Sparkles,
-    title: "נקודת התחלה מ־AI",
-    text: "ספרו לאן ומתי, וקבלו הצעה אישית שאפשר לשנות בחופשיות.",
-    tag: "AI",
-  },
-];
+  { key: "route", icon: Route },
+  { key: "map", icon: MapPin },
+  { key: "budget", icon: Wallet },
+  { key: "ai", icon: Sparkles },
+] as const;
 export default function Index() {
+  const t = useT().home,
+    { lang } = useLang(),
+    destinations = destinationsFor(lang);
   return (
     <>
       <SiteHeader tone="mint" />
@@ -45,13 +29,13 @@ export default function Index() {
         <section className="home-hero">
           <div className="hero-copy section-wrap">
             <span className="eyebrow" data-reveal>
-              כל מסע מתחיל ברעיון קטן
+              {t.hero.eyebrow}
             </span>
             <h1>
-              <SplitWords text="הטיול הבא שלכם" delay={0.1} />
+              <SplitWords text={t.hero.title} delay={0.1} />
             </h1>
             <p data-reveal style={delay(160)}>
-              המסלול, המפה וכל הרגעים. יחד, במקום אחד.
+              {t.hero.lead}
             </p>
           </div>
           <div
@@ -60,7 +44,7 @@ export default function Index() {
             data-reveal
             style={delay(240)}
           >
-            <h2 className="sr-only">אז, לאן נוסעים?</h2>
+            <h2 className="sr-only">{t.hero.plannerHeading}</h2>
             <TripForm compact />
           </div>
           <figure className="hero-media section-wrap" data-reveal>
@@ -68,14 +52,14 @@ export default function Index() {
               <img
                 className="hero-photo"
                 src={heroImage}
-                alt="הבתים הצבעוניים של צ׳ינקווה טרה מעל הים באיטליה"
+                alt={t.hero.photoAlt}
                 fetchPriority="high"
               />
             </div>
             <figcaption>
-              <span>צ׳ינקווה טרה, איטליה</span>
+              <span>{t.hero.photoCaption}</span>
               <a href="https://unsplash.com" target="_blank" rel="noreferrer">
-                צילום: Unsplash
+                {t.hero.photoCredit}
               </a>
             </figcaption>
           </figure>
@@ -83,15 +67,15 @@ export default function Index() {
         <HowItWorks />
         <section className="inspiration">
           <div className="section-heading centered section-wrap" data-reveal>
-            <span className="eyebrow">קצת השראה לדרך</span>
+            <span className="eyebrow">{t.inspiration.eyebrow}</span>
             <h2>
-              <SplitWords text="המקום הבא להתאהב בו" />
+              <SplitWords text={t.inspiration.title} />
             </h2>
           </div>
           <div className="destination-grid section-wrap">
             {destinations.map((d, i) => (
               <article
-                key={d.name}
+                key={d.id}
                 className="destination-card"
                 data-reveal
                 style={delay((i % 2) * 80)}
@@ -116,7 +100,7 @@ export default function Index() {
                   <Link
                     to={`/trip/new?destination=${encodeURIComponent(d.name)}`}
                   >
-                    <CtaLabel>מתכננים ל{d.name}</CtaLabel>
+                    <CtaLabel>{t.inspiration.planFor(d.name)}</CtaLabel>
                   </Link>
                 </Button>
               </article>
@@ -125,9 +109,9 @@ export default function Index() {
         </section>
         <section className="features-section">
           <div className="section-heading centered section-wrap" data-reveal>
-            <span className="eyebrow">יותר חוויות. פחות לשוניות פתוחות.</span>
+            <span className="eyebrow">{t.features.eyebrow}</span>
             <h2>
-              <SplitWords text="כל מה שצריך, כדי פשוט לצאת" />
+              <SplitWords text={t.features.title} />
             </h2>
           </div>
           <div className="feature-layout section-wrap">
@@ -136,13 +120,13 @@ export default function Index() {
             </div>
             <ul className="feature-list">
               {features.map((f, i) => (
-                <li key={f.title} data-reveal style={delay(i * 60)}>
+                <li key={f.key} data-reveal style={delay(i * 60)}>
                   <f.icon className="feature-icon" />
                   <div>
-                    <h3>{f.title}</h3>
-                    <p>{f.text}</p>
+                    <h3>{t.features[f.key].title}</h3>
+                    <p>{t.features[f.key].text}</p>
                   </div>
-                  <span className="tag-chip">{f.tag}</span>
+                  <span className="tag-chip">{t.features[f.key].tag}</span>
                 </li>
               ))}
             </ul>
@@ -150,14 +134,14 @@ export default function Index() {
         </section>
         <section className="bottom-cta">
           <div className="section-wrap" data-reveal>
-            <span className="eyebrow">קצת עזרה, הרבה אפשרויות</span>
+            <span className="eyebrow">{t.bottomCta.eyebrow}</span>
             <h2>
-              <SplitWords text="יש לכם יעד. נבנה יחד את הדרך." />
+              <SplitWords text={t.bottomCta.title} />
             </h2>
-            <p>התחילו מדף חלק, או תנו ל־AI להציע נקודת התחלה.</p>
+            <p>{t.bottomCta.text}</p>
             <Button size="lg" asChild className="cta-arrow">
               <Link to="/trip/new">
-                <CtaLabel>מתחילים לתכנן</CtaLabel>
+                <CtaLabel>{t.bottomCta.cta}</CtaLabel>
               </Link>
             </Button>
           </div>

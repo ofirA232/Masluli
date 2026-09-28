@@ -13,6 +13,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { useSmoothScroll } from "@/hooks/useSmoothScroll";
 import { PlanCoverProvider } from "@/components/PlanLoading";
+import { LanguageProvider, useT } from "@/i18n";
 import Index from "./pages/Index";
 const Auth = lazy(() => import("./pages/Auth"));
 const Trip = lazy(() => import("./pages/Trip"));
@@ -27,6 +28,7 @@ const queryClient = new QueryClient({
 });
 function AnimatedRoutes() {
   const location = useLocation();
+  const t = useT();
   useSmoothScroll(location.pathname);
   // The first page paints as-is; only later navigations fade in, except into
   // a trip being generated, which arrives under the loading cover. Decided
@@ -52,7 +54,7 @@ function AnimatedRoutes() {
       <Suspense
         fallback={
           <div className="empty-state" role="status">
-            רק רגע, יוצאים לדרך…
+            {t.trip.routeLoading}
           </div>
         }
       >
@@ -73,20 +75,22 @@ function AnimatedRoutes() {
 export default function App() {
   useScrollReveal();
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Sonner />
-          {/* Under reduced motion, Motion keeps fades and drops movement. */}
-          <MotionConfig reducedMotion="user">
-            <PlanCoverProvider>
-              <BrowserRouter>
-                <AnimatedRoutes />
-              </BrowserRouter>
-            </PlanCoverProvider>
-          </MotionConfig>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <LanguageProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <Sonner />
+            {/* Under reduced motion, Motion keeps fades and drops movement. */}
+            <MotionConfig reducedMotion="user">
+              <PlanCoverProvider>
+                <BrowserRouter>
+                  <AnimatedRoutes />
+                </BrowserRouter>
+              </PlanCoverProvider>
+            </MotionConfig>
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </LanguageProvider>
   );
 }

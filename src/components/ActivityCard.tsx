@@ -26,13 +26,14 @@ import type {
   TripAccess,
   TripMetadata,
 } from "@/types/itinerary";
-import { categories, money, safeUrl, transportModes } from "@/lib/trips";
+import { money, safeUrl } from "@/lib/trips";
 import { LodgingDetails, ModeIcon, TransportBody } from "./StopBodies";
 import { stopKind } from "@/lib/stops";
 import { bookingLink } from "@/lib/booking-links";
 import { config } from "@/lib/config";
 import { getPlace, getPhoto } from "@/lib/api";
 import { placeCacheFresh } from "@/lib/place-cache";
+import { dirOf, useLang, useT } from "@/i18n";
 // Keep provider data for the session so switching days, tabs or the map
 // does not re-request the same place and photo.
 const SESSION_CACHE = 60 * 60 * 1000;
@@ -68,7 +69,7 @@ interface Props {
   /** Trip facts used to build booking links. */
   meta?: Pick<
     TripMetadata,
-    "destination" | "startDate" | "endDate" | "travelers"
+    "destination" | "startDate" | "endDate" | "travelers" | "language"
   >;
   /** This stop sits far from the rest of the trip, so the link looks wrong. */
   farFromTrip?: boolean;
@@ -103,6 +104,12 @@ export function ActivityCard({
   cue,
 }: Props) {
   const kind = stopKind(a);
+  // The stop's own words read in the trip's language, even when the site
+  // around them is in the other one.
+  const textDir = meta ? dirOf(meta.language) : undefined;
+  const t = useT(),
+    words = t.card,
+    { lang, dir } = useLang();
   // dnd-kit shifts the neighbours while dragging (zoox.com's in-out curve at
   // its 0.334s beat); TripWorkspace glides the dropped card into its slot and
   // pauses the Motion wrapper for the drag, so nothing else animates the move.
@@ -142,8 +149,14 @@ export function ActivityCard({
   }, []);
   const cached = placeCacheFresh(a.google, a.place_id) ? a.google : undefined;
   const place = useQuery({
-    queryKey: ["place", access.tripId, access.shareToken, a.place_id],
-    queryFn: () => getPlace(a.place_id!, access),
+    queryKey: [
+      "place",
+      access.tripId,
+      access.shareToken,
+      a.place_id,
+      meta?.language,
+    ],
+    queryFn: () => getPlace(a.place_id!, access, meta?.language),
     enabled: !!a.place_id && visible,
     initialData: cached?.place,
     staleTime: Infinity,
@@ -169,10 +182,16 @@ export function ActivityCard({
   useEffect(() => setImageFailed(false), [image]);
   const website = safeUrl(p?.website || a.booking_url);
   const booking = meta
-    ? bookingLink(a, meta, website, {
-        bookingAid: config.bookingAid,
-        gygPartnerId: config.gygPartnerId,
-      })
+    ? bookingLink(
+        a,
+        meta,
+        website,
+        {
+          bookingAid: config.bookingAid,
+          gygPartnerId: config.gygPartnerId,
+        },
+        lang,
+      )
     : undefined;
   return (
     <article
@@ -187,10 +206,10 @@ export function ActivityCard({
             {a.transport ? (
               <>
                 <ModeIcon mode={a.transport.mode} size={12} />
-                {transportModes[a.transport.mode]}
+                {t.common.transportModes[a.transport.mode]}
               </>
             ) : (
-              categories[a.category]
+              t.common.categories[a.category]
             )}
           </span>
           {a.time && (
@@ -202,7 +221,7 @@ export function ActivityCard({
           {!readOnly && (
             <button
               className="drag-handle"
-              aria-label={`גרירת ${a.name}`}
+              aria-label={words.drag(a.name)}
               {...attributes}
               {...listeners}
             >
@@ -214,7 +233,7 @@ export function ActivityCard({
           <div className="activity-cues">
             {cue && (
               <span className={`cue is-${cue}`}>
-                {cue === "now" ? "עכשיו" : "הבא בתור"}
+                {cue === "now" ? words.now : words.next}
               </span>
             )}
             {nearby && (
@@ -229,21 +248,29 @@ export function ActivityCard({
           <button
             className="stop-number"
             onClick={onSelect}
-            aria-label="הצגת המקום במפה"
+            aria-label={words.showOnMap}
             style={{ background: color }}
           >
             {index + 1}
           </button>
           {a.transport ? (
             <div className="activity-text">
-              <button className="activity-title" onClick={onSelect}>
+              <button
+                className="activity-title"
+                dir={textDir}
+                onClick={onSelect}
+              >
                 {a.name}
               </button>
               <TransportBody a={a} />
             </div>
           ) : (
             <div className="activity-text">
-              <button className="activity-title" onClick={onSelect}>
+              <button
+                className="activity-title"
+                dir={textDir}
+                onClick={onSelect}
+              >
                 {p?.name || a.name}
               </button>
               {/* Ratings only where they help choose: places to stay. */}
@@ -255,14 +282,12 @@ export function ActivityCard({
                   <small>({p.ratingCount || 0}) · Google Maps</small>
                 </span>
               )}
-              <p>
+              <p dir={a.description ? textDir : undefined}>
                 {a.description ||
-                  (a.place_id
-                    ? "עוד מקום ששווה לעצור בו בדרך."
-                    : "הוסיפו הערות ופרטים קטנים שהופכים את הטיול לשלכם.")}
+                  (a.place_id ? words.linkedFallback : words.manualFallback)}
               </p>
               {(p?.address || a.address) && (
-                <span className="activity-address">
+                <span className="activity-address" dir={textDir}>
                   <MapPin size={12} />
                   {p?.address || a.address}
                 </span>
@@ -311,11 +336,11 @@ export function ActivityCard({
         <div className="activity-bottom">
           <span className="cost-tag">
             {a.estimate
-              ? `${money(a.estimate.min)}${a.estimate.max !== a.estimate.min ? "–" + money(a.estimate.max) : ""} · ${a.estimate.basis === "person" ? "לאדם" : "לקבוצה"}`
+              ? `${money(a.estimate.min)}${a.estimate.max !== a.estimate.min ? "–" + money(a.estimate.max) : ""} · ${a.estimate.basis === "person" ? words.perPerson : words.perGroup}`
               : a.price
-                ? `${a.price} · אומדן לא מאומת`
-                : "עלות עדיין לא ידועה"}
-            {a.estimate?.source === "ai" && " · אומדן AI"}
+                ? words.unverifiedPrice(a.price)
+                : words.costUnknown}
+            {a.estimate?.source === "ai" && words.aiEstimate}
           </span>
           {booking && booking.provider !== "website" && (
             <a
@@ -323,7 +348,7 @@ export function ActivityCard({
               target="_blank"
               rel="noopener noreferrer sponsored"
               className="book-link"
-              aria-label={`הזמנה באתר חיצוני: ${booking.label}`}
+              aria-label={words.bookExternal(booking.label)}
             >
               {booking.label} <ExternalLink size={12} />
             </a>
@@ -335,63 +360,57 @@ export function ActivityCard({
               rel="noreferrer"
               className="text-link"
             >
-              אתר המקום <ExternalLink size={12} />
+              {words.website} <ExternalLink size={12} />
             </a>
           )}
         </div>
         {booking && booking.provider !== "website" && (
-          <small className="external-note">
-            קישור חיצוני, ייתכן שכולל קוד שותפים
-          </small>
+          <small className="external-note">{words.externalNote}</small>
         )}
         {!a.place_id && a.source !== "manual" && !a.transport && (
           <div className="verification-note">
-            הצעת AI / מסלול ישן · המקום עדיין לא אומת{" "}
-            {!readOnly && <button onClick={onEdit}>בחירת מקום</button>}
+            {words.unverified}{" "}
+            {!readOnly && <button onClick={onEdit}>{words.pickPlace}</button>}
           </div>
         )}
         {farFromTrip && !readOnly && (
           <div className="verification-note">
-            התחנה הזו רחוקה משאר התחנות בטיול. ייתכן שהיא קושרה למקום עם שם דומה
-            במקום אחר. <button onClick={onEdit}>בדיקה והחלפה</button>
+            {words.farFromTrip}{" "}
+            <button onClick={onEdit}>{words.checkAndReplace}</button>
           </div>
         )}
         {a.place_id && a.auto_linked && !readOnly && (
           <div className="verification-note">
-            קושר אוטומטית לפי השם{p ? ` אל ${p.name}` : ""}. לא המקום הנכון?{" "}
-            <button onClick={onEdit}>החלפת מקום</button>
+            {words.autoLinked(p?.name)}{" "}
+            <button onClick={onEdit}>{words.replacePlace}</button>
           </div>
         )}
         {place.error && (
           <div className="verification-note">
             {place.error.message}
-            <button onClick={() => void place.refetch()}>ניסיון נוסף</button>
+            <button onClick={() => void place.refetch()}>
+              {words.retry}
+            </button>
           </div>
         )}
         {selected && p && (
           <div className="place-expanded">
             {p.hours && (
               <details>
-                <summary>שעות פתיחה</summary>
+                <summary>{words.hours}</summary>
                 {p.hours.map((h) => (
                   <p key={h}>{h}</p>
                 ))}
               </details>
             )}
             {p.businessStatus === "CLOSED_PERMANENTLY" && (
-              <p className="form-error">לפי Google המקום סגור לצמיתות</p>
+              <p className="form-error">{words.closedForGood}</p>
             )}
             {p.priceLevel && (
               <p>
-                רמת מחיר:{" "}
-                {{
-                  PRICE_LEVEL_FREE: "חינם",
-                  PRICE_LEVEL_INEXPENSIVE: "נמוכה",
-                  PRICE_LEVEL_MODERATE: "בינונית",
-                  PRICE_LEVEL_EXPENSIVE: "גבוהה",
-                  PRICE_LEVEL_VERY_EXPENSIVE: "גבוהה מאוד",
-                }[p.priceLevel] || "לא ידועה"}{" "}
-                · אינה מחיר כרטיס
+                {words.priceLevel(
+                  words.priceLevels[p.priceLevel] || words.priceUnknown,
+                )}
               </p>
             )}
             <a
@@ -400,7 +419,7 @@ export function ActivityCard({
               rel="noreferrer"
               className="text-link"
             >
-              פתיחה ב־Google Maps <ExternalLink size={12} />
+              {words.openInMaps} <ExternalLink size={12} />
             </a>
           </div>
         )}
@@ -408,10 +427,10 @@ export function ActivityCard({
           <div className="activity-actions">
             <Button variant="ghost" size="sm" onClick={onEdit}>
               <Pencil size={13} />
-              עריכה
+              {words.edit}
             </Button>
             <select
-              aria-label={`העברת ${a.name} ליום אחר`}
+              aria-label={words.moveTo(a.name)}
               value={day}
               onChange={(e) =>
                 onMove(
@@ -419,19 +438,19 @@ export function ActivityCard({
                 )
               }
             >
-              <option value="saved">למקומות ששמרתי</option>
+              <option value="saved">{words.toSaved}</option>
               {Array.from({ length: dayCount }, (_, i) => (
                 <option key={i} value={i + 1}>
-                  יום {i + 1}
+                  {words.day(i + 1)}
                 </option>
               ))}
             </select>
-            <DropdownMenu dir="rtl">
+            <DropdownMenu dir={dir}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={`עוד פעולות עבור ${a.name}`}
+                  aria-label={words.moreActions(a.name)}
                 >
                   <MoreHorizontal />
                 </Button>
@@ -442,11 +461,11 @@ export function ActivityCard({
                   onSelect={() => onMove(day, index - 1)}
                 >
                   <ChevronUp size={15} />
-                  העברה למעלה
+                  {words.moveUp}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onMove(day, index + 1)}>
                   <ChevronDown size={15} />
-                  העברה למטה
+                  {words.moveDown}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -457,7 +476,7 @@ export function ActivityCard({
                     size={15}
                     className={swapping ? "animate-spin" : ""}
                   />
-                  הצעה חלופית מ־AI
+                  {words.swap}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -465,7 +484,7 @@ export function ActivityCard({
                   onSelect={onDelete}
                 >
                   <Trash2 size={15} />
-                  הסרת התחנה
+                  {words.remove}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

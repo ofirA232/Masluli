@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { format, parseISO } from "date-fns";
-import { he } from "date-fns/locale";
+import { format, parseISO, type Locale } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 // The calendar is a third of this page weight; load it when the panel opens.
@@ -12,9 +11,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useLang, useT } from "@/i18n";
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
-const pretty = (value: string) =>
-  value ? format(parseISO(value), "d בMMM", { locale: he }) : "";
+const pretty = (value: string, pattern: string, locale: Locale) =>
+  value ? format(parseISO(value), pattern, { locale }) : "";
 // One field for both dates: a range calendar, with the two native date
 // inputs kept inside the panel for direct entry and for form validation.
 export function TripDates({
@@ -27,6 +27,9 @@ export function TripDates({
   onChange: (dates: { startDate: string; endDate: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const words = useT().trip.dates,
+    { dir, locale } = useLang();
+  const short = (value: string) => pretty(value, words.short, locale);
   // The panel always drops below the field, like any dropdown: flipping it
   // above would cover the page's headline. Where there is no room below, the
   // page scrolls just enough to bring the whole panel into view (again once
@@ -65,19 +68,19 @@ export function TripDates({
     : undefined;
   const label =
     startDate && endDate
-      ? `${pretty(startDate)} — ${pretty(endDate)}`
+      ? `${short(startDate)} — ${short(endDate)}`
       : startDate
-        ? `${pretty(startDate)} — ?`
+        ? `${short(startDate)} — ?`
         : "";
   return (
     <div className="field dates-field">
       <span>
         <CalendarDays size={16} />
-        מתי?
+        {words.when}
       </span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger className="dates-trigger" type="button">
-          {label || <em>בחרו תאריכים</em>}
+          {label || <em>{words.choose}</em>}
         </PopoverTrigger>
         <PopoverContent
           ref={setPanel}
@@ -92,8 +95,8 @@ export function TripDates({
             <Calendar
               mode="range"
               numberOfMonths={2}
-              locale={he}
-              dir="rtl"
+              locale={locale}
+              dir={dir}
               defaultMonth={selected?.from}
               selected={selected}
               disabled={{ before: new Date() }}
@@ -104,8 +107,10 @@ export function TripDates({
                 day: "h-11 w-11 rounded-[14px] font-normal",
                 head_cell: "w-11 text-xs text-muted-foreground font-normal",
                 // In RTL the previous month sits to the right.
-                nav_button_previous: "absolute right-1",
-                nav_button_next: "absolute left-1",
+                nav_button_previous:
+                  dir === "rtl" ? "absolute right-1" : "absolute left-1",
+                nav_button_next:
+                  dir === "rtl" ? "absolute left-1" : "absolute right-1",
               }}
               onSelect={(range) =>
                 onChange({
@@ -117,10 +122,10 @@ export function TripDates({
           </Suspense>
           <div className="dates-inputs">
             <label>
-              יוצאים
+              {words.leaving}
               <input
                 name="startDate"
-                aria-label="תאריך התחלה"
+                aria-label={words.start}
                 type="date"
                 value={startDate}
                 onChange={(e) =>
@@ -130,10 +135,10 @@ export function TripDates({
               />
             </label>
             <label>
-              חוזרים
+              {words.returning}
               <input
                 name="endDate"
-                aria-label="תאריך סיום"
+                aria-label={words.end}
                 type="date"
                 value={endDate}
                 min={startDate}
