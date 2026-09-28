@@ -14,12 +14,14 @@ import { Button } from "@/components/ui/button";
 import { RippleLoader } from "@/components/ui/ripple-loader";
 import { usePlanCover } from "@/components/PlanLoading";
 import type { TripRecord } from "@/types/itinerary";
+import { useT } from "@/i18n";
 export default function Trip() {
   const { id } = useParams(),
     [params] = useSearchParams(),
     location = useLocation(),
     { user, loading: authLoading } = useAuthState(),
     setCover = usePlanCover();
+  const words = useT().trip.page;
   const generate = !!location.state?.generate;
   // Arriving to generate (also after a reload mid-creation): the cover stays
   // up while the trip loads; the workspace takes it over from there.
@@ -29,12 +31,12 @@ export default function Trip() {
   const shareToken = params.get("share_token") || undefined;
   const [record, setRecord] = useState<TripRecord | null>(null),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState("");
+    [error, setError] = useState(false);
   useEffect(() => {
     if (authLoading) return;
     let active = true;
     setLoading(true);
-    setError("");
+    setError(false);
     setRecord(null);
     const load = async () => {
       try {
@@ -55,10 +57,10 @@ export default function Trip() {
           if (error) throw error;
           found = data?.find((t) => t.id === id) || null;
         }
-        if (!found) throw new Error("הטיול לא נמצא או שאין הרשאה לצפות בו.");
+        if (!found) throw new Error("Trip not found or not shared");
         if (active) setRecord(found);
       } catch {
-        if (active) setError("הטיול לא נמצא או שאין הרשאה לצפות בו.");
+        if (active) setError(true);
       } finally {
         if (active) setLoading(false);
       }
@@ -81,7 +83,7 @@ export default function Trip() {
           {!generate && (
             <>
               <RippleLoader />
-              <p>פותחים את המסלול שלכם…</p>
+              <p>{words.opening}</p>
             </>
           )}
         </main>
@@ -93,17 +95,17 @@ export default function Trip() {
         <SiteHeader />
         <main className="empty-state">
           <MapPin size={40} />
-          <h1>לא הצלחנו לפתוח את הטיול</h1>
-          <p>{error}</p>
+          <h1>{words.cantOpen}</h1>
+          <p>{error ? words.notFound : ""}</p>
           {!user && !shareToken && (
             <Button asChild>
               <Link to={`/auth?next=${encodeURIComponent("/trip/" + id)}`}>
-                כניסה לחשבון
+                {words.signIn}
               </Link>
             </Button>
           )}
           <Link to="/my-trips" className="text-link">
-            לכל הטיולים שלי
+            {words.allTrips}
           </Link>
         </main>
       </>

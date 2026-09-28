@@ -9,29 +9,22 @@ import { validatePassword } from "@/lib/password-validation";
 import { heroImage } from "@/lib/destinations";
 import { useAuthState } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
-const AUTH_ERRORS: Record<string, string> = {
-  invalid_credentials: "האימייל או הסיסמה אינם נכונים",
-  email_not_confirmed: "יש לאמת את כתובת האימייל לפני הכניסה",
-  email_address_invalid: "כתובת האימייל אינה תקינה",
-  user_already_exists: "כבר קיים חשבון עם האימייל הזה. נסו להיכנס.",
-  weak_password: "הסיסמה חלשה מדי. בחרו סיסמה ארוכה ומורכבת יותר.",
-  over_email_send_rate_limit:
-    "נשלחו יותר מדי מיילים בזמן קצר. נסו שוב בעוד כשעה.",
-  over_request_rate_limit: "יותר מדי ניסיונות. המתינו מעט ונסו שוב.",
-  signup_disabled: "ההרשמה סגורה כרגע.",
-};
-function describeAuthError(e: unknown): string {
+import { useLang, useT, type Strings } from "@/i18n";
+function describeAuthError(e: unknown, t: Strings["auth"]): string {
   const code = typeof e === "object" && e && "code" in e ? String(e.code) : "";
-  if (AUTH_ERRORS[code]) return AUTH_ERRORS[code];
+  // Messages by Supabase auth error code.
+  const known: Record<string, string> = t.errors;
+  if (Object.prototype.hasOwnProperty.call(known, code)) return known[code];
   const msg = e instanceof Error ? e.message : "";
-  if (msg.includes("Invalid login")) return AUTH_ERRORS.invalid_credentials;
-  if (msg.includes("Email not confirmed")) return AUTH_ERRORS.email_not_confirmed;
-  if (/fetch|network/i.test(msg))
-    return "אין חיבור לשירות. בדקו את החיבור לאינטרנט ונסו שוב.";
-  return "לא הצלחנו להתחבר. בדקו את הפרטים ונסו שוב.";
+  if (msg.includes("Invalid login")) return t.errors.invalid_credentials;
+  if (msg.includes("Email not confirmed")) return t.errors.email_not_confirmed;
+  if (/fetch|network/i.test(msg)) return t.network;
+  return t.failed;
 }
 export default function Auth() {
   const { user } = useAuthState();
+  const t = useT().auth,
+    { lang } = useLang();
   const [params] = useSearchParams(),
     navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login"),
@@ -54,17 +47,17 @@ export default function Auth() {
     setError("");
     setMessage("");
     if (!hasSupabase) {
-      setError("ההתחברות עדיין לא זמינה. יש להשלים את הגדרת השירות.");
+      setError(t.notAvailable);
       return;
     }
     if (mode === "signup") {
-      const valid = validatePassword(password);
+      const valid = validatePassword(password, lang);
       if (!valid.valid) {
         setError(valid.error!);
         return;
       }
       if (password !== confirm) {
-        setError("הסיסמאות אינן תואמות");
+        setError(t.mismatch);
         return;
       }
     }
@@ -83,12 +76,10 @@ export default function Auth() {
       if (result.error) throw result.error;
       if (result.data.session) navigate(next, { replace: true });
       else
-        setMessage(
-          "שלחנו קישור אימות לאימייל שלכם. לאחר האימות תוכלו להיכנס ולהמשיך.",
-        );
+        setMessage(t.checkEmail);
     } catch (e) {
       logger.error("auth request failed", e);
-      setError(describeAuthError(e));
+      setError(describeAuthError(e, t));
     } finally {
       setBusy(false);
     }
@@ -101,13 +92,9 @@ export default function Auth() {
           masluli.
         </Link>
         <div className="auth-form-content">
-          <span className="eyebrow">ההרפתקה ממשיכה כאן</span>
-          <h1>{mode === "login" ? "כיף שחזרתם." : "נעים להכיר."}</h1>
-          <p>
-            {mode === "login"
-              ? "כל המקומות ששמרתם. כל הטיולים שעוד מחכים."
-              : "החשבון שלכם, והעולם כולו לפניכם."}
-          </p>
+          <span className="eyebrow">{t.eyebrow}</span>
+          <h1>{t.title[mode]}</h1>
+          <p>{t.lead[mode]}</p>
           <div className="auth-tabs">
             <button
               onClick={() => {
@@ -117,7 +104,7 @@ export default function Auth() {
               className={mode === "login" ? "active" : ""}
             >
               {mode === "login" && <ActivePill group="auth-tab" />}
-              כניסה לחשבון
+              {t.tabs.login}
             </button>
             <button
               onClick={() => {
@@ -127,12 +114,12 @@ export default function Auth() {
               className={mode === "signup" ? "active" : ""}
             >
               {mode === "signup" && <ActivePill group="auth-tab" />}
-              הרשמה
+              {t.tabs.signup}
             </button>
           </div>
           <form onSubmit={submit}>
             <label className="field">
-              <span>כתובת אימייל</span>
+              <span>{t.email}</span>
               <input
                 type="email"
                 autoCapitalize="none"
@@ -147,7 +134,7 @@ export default function Auth() {
               />
             </label>
             <label className="field">
-              <span>סיסמה</span>
+              <span>{t.password}</span>
               <div className="password-input">
                 <input
                   dir="ltr"
@@ -162,7 +149,7 @@ export default function Auth() {
                 />
                 <button
                   type="button"
-                  aria-label={visible ? "הסתרת סיסמה" : "הצגת סיסמה"}
+                  aria-label={visible ? t.hidePassword : t.showPassword}
                   onClick={() => setVisible(!visible)}
                 >
                   {visible ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -171,11 +158,9 @@ export default function Auth() {
             </label>
             {mode === "signup" && (
               <>
-                <p className="field-help">
-                  לפחות 8 תווים, עם 3 מתוך: אות גדולה, אות קטנה, מספר ותו מיוחד.
-                </p>
+                <p className="field-help">{t.passwordHelp}</p>
                 <label className="field">
-                  <span>אימות סיסמה</span>
+                  <span>{t.confirmPassword}</span>
                   <input
                     dir="ltr"
                     type="password"
@@ -199,26 +184,29 @@ export default function Auth() {
             )}
             <Button type="submit" size="lg" className="w-full" disabled={busy}>
               {busy ? <Loader2 className="animate-spin" /> : <ArrowLeft />}
-              {mode === "login" ? "נכנסים וממשיכים לתכנן" : "יוצרים חשבון"}
+              {t.submit[mode]}
             </Button>
           </form>
           <p className="auth-legal">
-            בהמשך השימוש אתם מסכימים ל<Link to="/terms">תנאי השימוש</Link> ול
-            <Link to="/privacy">מדיניות הפרטיות</Link>.
+            {t.legal.before}
+            <Link to="/terms">{t.legal.terms}</Link>
+            {t.legal.and}
+            <Link to="/privacy">{t.legal.privacy}</Link>
+            {t.legal.after}
           </p>
         </div>
         <Link to="/" className="text-link">
-          חזרה לדף הבית
+          {t.backHome}
         </Link>
       </section>
       <aside className="auth-image">
-        <img src={heroImage} alt="החוף האיטלקי" />
+        <img src={heroImage} alt={t.imageAlt} />
         <div>
-          <span className="eyebrow light">העולם מחכה לכם</span>
+          <span className="eyebrow light">{t.asideEyebrow}</span>
           <h2>
-            הסיפורים הכי טובים
+            {t.asideTitle[0]}
             <br />
-            מתחילים בדרך.
+            {t.asideTitle[1]}
           </h2>
         </div>
       </aside>

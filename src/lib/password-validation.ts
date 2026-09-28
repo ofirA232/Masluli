@@ -1,13 +1,18 @@
 // Password validation utilities
+import { currentLang, strings, type Lang } from "@/i18n";
 
 export interface PasswordValidationResult {
   valid: boolean;
   error?: string;
 }
 
-export function validatePassword(password: string): PasswordValidationResult {
+export function validatePassword(
+  password: string,
+  lang: Lang = currentLang(),
+): PasswordValidationResult {
+  const rules = strings(lang).auth.passwordRules;
   if (password.length < 8) {
-    return { valid: false, error: "הסיסמה חייבת להכיל לפחות 8 תווים" };
+    return { valid: false, error: rules.tooShort };
   }
 
   const hasUpperCase = /[A-Z]/.test(password);
@@ -20,7 +25,7 @@ export function validatePassword(password: string): PasswordValidationResult {
   if (complexityCount < 3) {
     return {
       valid: false,
-      error: "הסיסמה חייבת לכלול לפחות 3 מתוך: אותיות גדולות, קטנות, מספרים, תווים מיוחדים",
+      error: rules.complexity,
     };
   }
 
@@ -29,7 +34,7 @@ export function validatePassword(password: string): PasswordValidationResult {
 
 export function getPasswordStrength(password: string): number {
   if (!password) return 0;
-  
+
   let strength = 0;
   if (password.length >= 8) strength += 25;
   if (password.length >= 12) strength += 15;
@@ -37,14 +42,18 @@ export function getPasswordStrength(password: string): number {
   if (/[A-Z]/.test(password)) strength += 15;
   if (/[0-9]/.test(password)) strength += 15;
   if (/[^A-Za-z0-9]/.test(password)) strength += 15;
-  
+
   return Math.min(strength, 100);
 }
 
-export function getPasswordStrengthLabel(strength: number): string {
-  if (strength < 50) return "חלשה";
-  if (strength < 75) return "בינונית";
-  return "חזקה";
+export function getPasswordStrengthLabel(
+  strength: number,
+  lang: Lang = currentLang(),
+): string {
+  const rules = strings(lang).auth.passwordRules;
+  if (strength < 50) return rules.weak;
+  if (strength < 75) return rules.medium;
+  return rules.strong;
 }
 
 export function getPasswordStrengthColor(strength: number): string {

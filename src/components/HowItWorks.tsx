@@ -1,33 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { SplitWords } from "./SplitWords";
-const steps = [
-  {
-    tag: "שלב 1",
-    title: "אומרים לאן ומתי",
-    text: "יעד, תאריכים וכמה אנשים. זה כל מה שצריך כדי להתחיל.",
-    image: "/images/how/plan.webp",
-  },
-  {
-    tag: "שלב 2",
-    title: "מקבלים מסלול ליום",
-    text: "תחנות מסודרות לפי ימים, עם זמני מעבר ביניהן ומפה שמראה את התמונה המלאה.",
-    image: "/images/how/itinerary.webp",
-  },
-  {
-    tag: "שלב 3",
-    title: "משנים בשיחה",
-    text: "אפשר לגרור תחנות, ואפשר פשוט לכתוב מה לשנות. המסלול מתעדכן והשינוי הפיך.",
-    image: "/images/how/refine.webp",
-  },
-  {
-    tag: "שלב 4",
-    title: "יודעים כמה זה עולה",
-    text: "אומדנים, הוצאות בפועל וחלוקה בין המטיילים, באותו מקום שבו מתכננים.",
-    image: "/images/how/budget.webp",
-  },
-];
+import { useLang, useT } from "@/i18n";
+const steps = ["plan", "itinerary", "refine", "budget"] as const;
+// Screenshots of the site itself, so each language shows its own.
+const image = (key: string, lang: string) =>
+  `/images/how/${lang === "en" ? "en/" : ""}${key}.webp`;
 // The screenshot stays pinned while the steps scroll past it and swap it.
 export function HowItWorks() {
+  const t = useT().home.how,
+    { lang } = useLang();
   const [active, setActive] = useState(0);
   const items = useRef<(HTMLLIElement | null)[]>([]);
   useEffect(() => {
@@ -47,17 +28,17 @@ export function HowItWorks() {
   return (
     <section className="how-section">
       <div className="section-heading centered section-wrap" data-reveal>
-        <span className="eyebrow">איך זה עובד</span>
+        <span className="eyebrow">{t.eyebrow}</span>
         <h2>
-          <SplitWords text="מרעיון למסלול, בארבעה צעדים" />
+          <SplitWords text={t.title} />
         </h2>
       </div>
       <div className="how-layout section-wrap">
         <div className="how-media">
           {steps.map((step, i) => (
             <img
-              key={step.image}
-              src={step.image}
+              key={step}
+              src={image(step, lang)}
               alt=""
               loading="lazy"
               className={i === active ? "is-active" : ""}
@@ -67,7 +48,7 @@ export function HowItWorks() {
         <ol className="how-steps">
           {steps.map((step, i) => (
             <li
-              key={step.title}
+              key={step}
               data-index={i}
               data-active={i === active}
               ref={(el) => {
@@ -76,9 +57,9 @@ export function HowItWorks() {
             >
               <span className="step-index">{i + 1}</span>
               <div>
-                <span className="eyebrow">{step.tag}</span>
-                <h3>{step.title}</h3>
-                <p>{step.text}</p>
+                <span className="eyebrow">{t.step(i + 1)}</span>
+                <h3>{t[step].title}</h3>
+                <p>{t[step].text}</p>
               </div>
             </li>
           ))}

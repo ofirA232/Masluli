@@ -186,3 +186,23 @@ describe("getting around", () => {
     expect(requestSchema.safeParse({ ...request, gettingAround: "boat" }).success).toBe(false);
   });
 });
+
+describe("the trip's language", () => {
+  it("is the site's when the trip is created", () => {
+    expect(createPlan(request, "he").metadata.language).toBe("he");
+    const english = createPlan({ ...request, destination: "Paris" }, "en");
+    expect(english.metadata.language).toBe("en");
+    expect(english.metadata.title).toBe(
+      createPlan({ ...request, destination: "Paris" }, "en").metadata.title,
+    );
+    expect(english.metadata.title).not.toBe(
+      createPlan({ ...request, destination: "Paris" }, "he").metadata.title,
+    );
+  });
+  it("stays with the trip, and older trips are Hebrew", () => {
+    const stored = createPlan(request, "en");
+    expect(normalizePlan(stored).metadata.language).toBe("en");
+    const older = { ...stored, metadata: { ...stored.metadata, language: undefined } };
+    expect(normalizePlan(older).metadata.language).toBe("he");
+  });
+});

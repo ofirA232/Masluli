@@ -1,6 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { addTraveler } from "@/lib/budget";
 import type { Traveler } from "@/types/itinerary";
+import { useT } from "@/i18n";
 /** Names of the people on the trip. Ids stay stable so expenses keep pointing at them. */
 export function TravelersEditor({
   value,
@@ -12,12 +13,13 @@ export function TravelersEditor({
   /** Travelers referenced by expenses; removing one asks for confirmation. */
   inUse?: Set<string>;
 }) {
+  const words = useT().trip.travelers;
   return (
     <div className="travelers-editor">
       {value.map((t, i) => (
         <div key={t.id} className="traveler-row">
           <input
-            aria-label={`שם מטייל ${i + 1}`}
+            aria-label={words.nameLabel(i + 1)}
             maxLength={40}
             value={t.name}
             onChange={(e) =>
@@ -30,14 +32,12 @@ export function TravelersEditor({
           />
           <button
             type="button"
-            aria-label={`הסרת ${t.name}`}
+            aria-label={words.remove(t.name)}
             disabled={value.length <= 1}
             onClick={() => {
               if (
                 inUse?.has(t.id) &&
-                !window.confirm(
-                  `${t.name} מופיע/ה בהוצאות. ההוצאות יישארו בלי משלם/ת. להסיר?`,
-                )
+                !window.confirm(words.confirmRemove(t.name))
               )
                 return;
               onChange(value.filter((v) => v.id !== t.id));
@@ -54,7 +54,7 @@ export function TravelersEditor({
         onClick={() => onChange(addTraveler(value))}
       >
         <Plus size={14} />
-        הוספת מטייל
+        {words.add}
       </button>
     </div>
   );

@@ -10,11 +10,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { createPlan } from "@/lib/trips";
 import type { ItineraryRequest } from "@/types/itinerary";
 import type { Json } from "@/integrations/supabase/types";
+import { useLang, useT } from "@/i18n";
 export default function NewTrip() {
   const [busy, setBusy] = useState(false),
     { user } = useAuthState(),
     navigate = useNavigate(),
     setCover = usePlanCover();
+  const t = useT().form.page,
+    { lang } = useLang();
   const create = async (request: ItineraryRequest, ai: boolean) => {
     if (!user) {
       navigate("/auth?next=%2Ftrip%2Fnew");
@@ -25,7 +28,7 @@ export default function NewTrip() {
     // workspace has the plan; the pages in between never show.
     if (ai) setCover("composing");
     try {
-      const plan = createPlan(request);
+      const plan = createPlan(request, lang);
       const { data, error } = await supabase
         .from("trips")
         .insert({
@@ -35,10 +38,7 @@ export default function NewTrip() {
         })
         .select("*")
         .single();
-      if (error)
-        throw new Error(
-          "לא הצלחנו לשמור את הטיול. הפרטים שלכם נשמרו, ואפשר לנסות שוב.",
-        );
+      if (error) throw new Error(t.saveFailed);
       sessionStorage.removeItem(requestKey);
       navigate(`/trip/${data.id}`, { state: { generate: ai }, replace: true });
     } catch (e) {
@@ -55,17 +55,17 @@ export default function NewTrip() {
         <div className="section-wrap">
           <Link to="/" className="text-link">
             <ArrowRight size={16} />
-            בחזרה להשראה
+            {t.back}
           </Link>
           <div className="new-trip-copy">
-            <span className="eyebrow">התחלה של משהו טוב</span>
+            <span className="eyebrow">{t.eyebrow}</span>
             <h1>
-              <SplitWords text="כל טיול גדול מתחיל ב״לאן?״" delay={0.05} />
+              <SplitWords text={t.title} delay={0.05} />
             </h1>
-            <p>כמה פרטים קטנים, ואתם בדרך. תמיד אפשר לשנות, להזיז ולגלות עוד.</p>
+            <p>{t.lead}</p>
           </div>
           <div className="form-card">
-            <h2>בואו נכיר את הטיול שלכם</h2>
+            <h2>{t.formTitle}</h2>
             <TripForm onSubmit={create} busy={busy} />
           </div>
         </div>

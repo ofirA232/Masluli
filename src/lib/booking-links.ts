@@ -1,4 +1,5 @@
 import { dayDate, safeUrl } from "./trips";
+import { currentLang, strings, type Lang } from "@/i18n";
 import type { Activity, TripMetadata } from "@/types/itinerary";
 // Plain https links to partner search pages, built client-side. Affiliate ids
 // are optional; without them the links still work, just untracked.
@@ -51,12 +52,14 @@ export function bookingLink(
   meta: Meta,
   website: string | undefined,
   ids: AffiliateIds,
+  lang: Lang = currentLang(),
 ): BookingLink | undefined {
   if (activity.transport) return undefined;
+  const words = strings(lang).card;
   if (activity.category === "accommodation") {
     const href = bookingSearchUrl(meta, ids.bookingAid);
     return href
-      ? { href, provider: "booking", label: "הזמנה · Booking.com" }
+      ? { href, provider: "booking", label: words.booking.hotel }
       : undefined;
   }
   if (
@@ -69,10 +72,10 @@ export function bookingLink(
       ids.gygPartnerId,
     );
     return href
-      ? { href, provider: "gyg", label: "כרטיסים · GetYourGuide" }
+      ? { href, provider: "gyg", label: words.booking.tickets }
       : undefined;
   }
   return website
-    ? { href: website, provider: "website", label: "אתר המקום" }
+    ? { href: website, provider: "website", label: words.website }
     : undefined;
 }

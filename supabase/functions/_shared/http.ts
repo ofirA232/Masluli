@@ -1,11 +1,48 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.116.0";
+export type Lang = "he" | "en";
+/**
+ * What a traveller is told, in both site languages. A plain string is used
+ * for both (e.g. a message with no words to translate).
+ */
+export type Message = string | { he: string; en: string };
 export class ApiError extends Error {
+  /** The message in each language; `message` stays the Hebrew one. */
+  readonly text: { he: string; en: string };
   constructor(
     public status: number,
-    message: string,
+    message: Message,
   ) {
-    super(message);
+    const text =
+      typeof message === "string" ? { he: message, en: message } : message;
+    super(text.he);
+    this.text = text;
   }
+}
+const unavailable = {
+  he: "השירות לא זמין כרגע. אפשר לנסות שוב.",
+  en: "The service isn't available right now. Please try again.",
+};
+/**
+ * The site's language as the client sent it (`lang`), for content: what the
+ * AI writes, and Google's names and hours. Hebrew when missing, as before.
+ */
+export const siteLang = (body: Record<string, unknown>): Lang =>
+  body.lang === "en" ? "en" : "he";
+/**
+ * The language to answer errors in: the site's own (`lang`, which the client sends
+ * with every call) once the body has been read; before that, or when it is
+ * missing, the browser's Accept-Language (Hebrew only when it starts with
+ * Hebrew); with neither, Hebrew.
+ */
+export function callerLang(req: Request, body?: unknown): Lang {
+  const lang =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>).lang
+      : undefined;
+  if (lang === "he" || lang === "en") return lang;
+  const accept = req.headers.get("accept-language")?.trim();
+  if (accept) return /^(he|iw)\b/i.test(accept) ? "he" : "en";
+  return "he";
 }
 export function cors(req: Request) {
   const origin = req.headers.get("origin") || "";
@@ -23,6 +60,14 @@ export function cors(req: Request) {
     Vary: "Origin",
   };
 }
+export const badRequest = {
+  he: "בקשה לא תקינה",
+  en: "The request isn't valid",
+};
+export const tooLarge = {
+  he: "הבקשה גדולה מדי",
+  en: "The request is too large",
+};
 export async function handler(
   req: Request,
   run: (body: Record<string, unknown>) => Promise<unknown>,
@@ -33,20 +78,26 @@ export async function handler(
     "Cache-Control": "no-store",
   };
   if (req.method === "OPTIONS") return new Response(null, { headers });
+  let lang = callerLang(req);
   try {
-    if (req.method !== "POST") throw new ApiError(405, "פעולה לא נתמכת");
+    if (req.method !== "POST")
+      throw new ApiError(405, {
+        he: "פעולה לא נתמכת",
+        en: "This action isn't supported",
+      });
     if (Number(req.headers.get("content-length")) > 1048576)
-      throw new ApiError(413, "הבקשה גדולה מדי");
+      throw new ApiError(413, tooLarge);
     const raw = await req.text();
-    if (raw.length > 1048576) throw new ApiError(413, "הבקשה גדולה מדי");
+    if (raw.length > 1048576) throw new ApiError(413, tooLarge);
     let body;
     try {
       body = JSON.parse(raw);
     } catch {
-      throw new ApiError(400, "בקשה לא תקינה");
+      throw new ApiError(400, badRequest);
     }
     if (!body || typeof body !== "object" || Array.isArray(body))
-      throw new ApiError(400, "בקשה לא תקינה");
+      throw new ApiError(400, badRequest);
+    lang = callerLang(req, body);
     return new Response(JSON.stringify(await run(body)), { headers });
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 502;
@@ -57,10 +108,7 @@ export async function handler(
       );
     return new Response(
       JSON.stringify({
-        error:
-          error instanceof ApiError
-            ? error.message
-            : "השירות לא זמין כרגע. אפשר לנסות שוב.",
+        error: (error instanceof ApiError ? error.text : unavailable)[lang],
       }),
       {
         status,
@@ -74,7 +122,10 @@ export async function handler(
 }
 export function textInput(value: unknown, max = 200) {
   if (typeof value !== "string" || !value.trim() || value.length > max)
-    throw new ApiError(400, "ערך לא תקין");
+    throw new ApiError(400, {
+      he: "ערך לא תקין",
+      en: "A value isn't valid",
+    });
   return value.trim();
 }
 export function client(req?: Request) {
@@ -93,7 +144,11 @@ export function client(req?: Request) {
 }
 export async function userId(req: Request) {
   const { data, error } = await client(req).auth.getUser();
-  if (error || !data.user) throw new ApiError(401, "יש להתחבר כדי להמשיך");
+  if (error || !data.user)
+    throw new ApiError(401, {
+      he: "יש להתחבר כדי להמשיך",
+      en: "Please sign in to continue",
+    });
   return data.user.id;
 }
 export async function quota(
@@ -120,9 +175,16 @@ export async function quota(
       p_limit: cap,
       p_window_seconds: seconds,
     });
-    if (error) throw new ApiError(503, "השירות עדיין לא זמין");
+    if (error)
+      throw new ApiError(503, {
+        he: "השירות עדיין לא זמין",
+        en: "The service isn't available yet",
+      });
     if (!data)
-      throw new ApiError(429, "הגענו למכסת הבקשות. אפשר לנסות שוב בהמשך.");
+      throw new ApiError(429, {
+        he: "הגענו למכסת הבקשות. אפשר לנסות שוב בהמשך.",
+        en: "We've reached the request limit. Please try again later.",
+      });
   }
 }
 /**
@@ -167,10 +229,10 @@ export function recordUsage(entry: {
 export function googleKey() {
   const key = Deno.env.get("GOOGLE_MAPS_SERVER_KEY");
   if (!key)
-    throw new ApiError(
-      503,
-      "חיפוש המקומות והמפה יהיו זמינים לאחר חיבור שירות המפות. בינתיים אפשר לתכנן ידנית.",
-    );
+    throw new ApiError(503, {
+      he: "חיפוש המקומות והמפה יהיו זמינים לאחר חיבור שירות המפות. בינתיים אפשר לתכנן ידנית.",
+      en: "Place search and the map will be available once the map service is connected. Meanwhile, you can plan by hand.",
+    });
   return key;
 }
 export async function googleFetch(url: string, init: RequestInit = {}) {
@@ -192,10 +254,10 @@ export async function googleFetch(url: string, init: RequestInit = {}) {
       new URL(url).pathname,
       (await response.text()).slice(0, 500),
     );
-    throw new ApiError(
-      response.status === 429 ? 429 : 502,
-      "שירות המפות אינו זמין כרגע",
-    );
+    throw new ApiError(response.status === 429 ? 429 : 502, {
+      he: "שירות המפות אינו זמין כרגע",
+      en: "The map service isn't available right now",
+    });
   }
   return response.json();
 }
@@ -211,7 +273,11 @@ export async function authorizePlaces(
     // publishable key as a bearer JWT to PostgREST.
     const { data, error } = await client().rpc("get_shared_trip", { token });
     const trip = data?.find((t: { id: string }) => t.id === tripId);
-    if (error || !trip) throw new ApiError(403, "אין הרשאה לטיול");
+    if (error || !trip)
+      throw new ApiError(403, {
+        he: "אין הרשאה לטיול",
+        en: "You don't have access to this trip",
+      });
     const plan = trip.trip_data;
     const activities = [
       ...(plan.days || []).flatMap(
@@ -223,7 +289,10 @@ export async function authorizePlaces(
       activities.map((a: { place_id?: string }) => a.place_id).filter(Boolean),
     );
     if (!ids.every((id) => allowed.has(id)))
-      throw new ApiError(403, "המקום אינו שייך לטיול");
+      throw new ApiError(403, {
+        he: "המקום אינו שייך לטיול",
+        en: "This place isn't part of the trip",
+      });
     return `share:${tripId}`;
   }
   return userId(req);

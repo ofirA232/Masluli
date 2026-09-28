@@ -21,6 +21,7 @@ import {
   transportModes,
   uid,
 } from "@/lib/trips";
+import { useT } from "@/i18n";
 import { searchPlaces } from "@/lib/api";
 import type {
   Activity,
@@ -48,6 +49,11 @@ export function ActivityDialog({
   onClose: () => void;
 }) {
   const dialog = useClosingDialog(onClose);
+  const words = useT(),
+    t = words.stopDialog,
+    common = words.common;
+  // The placeholder name normalizeActivity stores for a stop with no name.
+  const unnamed = normalizeActivity({}).name;
   const [a, setA] = useState<Activity>(
     activity || normalizeActivity({ id: uid(), name: "", source: "manual" }),
   );
@@ -76,15 +82,15 @@ export function ActivityDialog({
     [lng, setLng] = useState(
       activity?.coordinates ? String(activity.coordinates.lng) : "",
     );
-  const t = activity?.transport;
-  const [mode, setMode] = useState<TransportMode>(t?.mode || "flight"),
-    [from, setFrom] = useState(t?.from || ""),
-    [to, setTo] = useState(t?.to || ""),
-    [departTime, setDepartTime] = useState(t?.depart_time || ""),
-    [arriveTime, setArriveTime] = useState(t?.arrive_time || ""),
-    [offset, setOffset] = useState<0 | 1 | 2>(t?.arrive_day_offset || 0),
-    [carrier, setCarrier] = useState(t?.carrier || ""),
-    [transportRef, setTransportRef] = useState(t?.booking_ref || "");
+  const leg = activity?.transport;
+  const [mode, setMode] = useState<TransportMode>(leg?.mode || "flight"),
+    [from, setFrom] = useState(leg?.from || ""),
+    [to, setTo] = useState(leg?.to || ""),
+    [departTime, setDepartTime] = useState(leg?.depart_time || ""),
+    [arriveTime, setArriveTime] = useState(leg?.arrive_time || ""),
+    [offset, setOffset] = useState<0 | 1 | 2>(leg?.arrive_day_offset || 0),
+    [carrier, setCarrier] = useState(leg?.carrier || ""),
+    [transportRef, setTransportRef] = useState(leg?.booking_ref || "");
   const l = activity?.lodging;
   const defaultCheckIn =
     l?.check_in ||
@@ -134,30 +140,32 @@ export function ActivityDialog({
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     // A brand-new stop starts with the normalizer's placeholder name.
-    let name = !activity && a.name === "מקום ללא שם" ? "" : a.name.trim();
+    let name = !activity && a.name === unnamed ? "" : a.name.trim();
     if (!name && kind === "transport" && (from.trim() || to.trim()))
-      name = `${transportModes[mode]}: ${from.trim()} → ${to.trim()}`;
-    if (!name) {
-      setError(
-        kind === "transport" ? "נא למלא מוצא ויעד" : "נא להזין שם למקום",
+      name = t.transportName(
+        common.transportModes[mode],
+        from.trim(),
+        to.trim(),
       );
+    if (!name) {
+      setError(kind === "transport" ? t.errors.fromTo : t.errors.name);
       return;
     }
     if (kind === "transport") {
       for (const v of [departTime, arriveTime])
         if (v && !clock(v)) {
-          setError("שעות בפורמט HH:mm");
+          setError(t.errors.timeFormat);
           return;
         }
     }
     if (kind === "lodging") {
       if (!dateOnly(checkIn) || !dateOnly(checkOut) || nights < 1) {
-        setError("צ'ק-אאוט חייב להיות אחרי צ'ק-אין");
+        setError(t.errors.checkOutAfter);
         return;
       }
       for (const v of [checkInTime, checkOutTime])
         if (v && !clock(v)) {
-          setError("שעות בפורמט HH:mm");
+          setError(t.errors.timeFormat);
           return;
         }
     }
@@ -181,7 +189,7 @@ export function ActivityDialog({
             currency: "ILS",
           });
     if ((min || max) && !estimate) {
-      setError("בדקו את טווח המחיר והכמות");
+      setError(t.errors.estimate);
       return;
     }
     let coordinates;
@@ -196,7 +204,7 @@ export function ActivityDialog({
         Math.abs(x) > 90 ||
         Math.abs(y) > 180
       ) {
-        setError("הקואורדינטות אינן תקינות");
+        setError(t.errors.coordinates);
         return;
       }
       coordinates = { lat: x, lng: y };
@@ -243,25 +251,23 @@ export function ActivityDialog({
     dialog.close();
   };
   const kinds: { id: StopKind; label: string; icon: React.ReactNode }[] = [
-    { id: "place", label: "מקום", icon: <MapPin size={15} /> },
-    { id: "transport", label: "תחבורה", icon: <Route size={15} /> },
-    { id: "lodging", label: "לינה", icon: <Bed size={15} /> },
+    { id: "place", label: t.kinds.place, icon: <MapPin size={15} /> },
+    { id: "transport", label: t.kinds.transport, icon: <Route size={15} /> },
+    { id: "lodging", label: t.kinds.lodging, icon: <Bed size={15} /> },
   ];
   return (
     <Dialog {...dialog.rootProps}>
       <DialogContent className="activity-dialog" {...dialog.contentProps}>
-        <DialogTitle>
-          {activity ? "הפרטים שעושים את ההבדל" : "עוד תחנה בדרך שלכם"}
-        </DialogTitle>
+        <DialogTitle>{activity ? t.titleEdit : t.titleNew}</DialogTitle>
         <DialogDescription>
           {kind === "transport"
-            ? "טיסה, רכבת או נסיעה. הפרטים נשמרים בציר הזמן של היום."
+            ? t.descTransport
             : kind === "lodging"
-              ? "המקום שבו ישנים. הלינה תופיע בכל יום שהיא מכסה."
-              : "חפשו מקום, או הוסיפו תחנה משלכם. אפשר לערוך הכול גם בהמשך."}
+              ? t.descLodging
+              : t.descPlace}
         </DialogDescription>
         {!activity && (
-          <div className="stop-kind" role="group" aria-label="סוג תחנה">
+          <div className="stop-kind" role="group" aria-label={t.kindGroup}>
             {kinds.map((k) => (
               <button
                 type="button"
@@ -284,11 +290,11 @@ export function ActivityDialog({
           <div className="place-search">
             <Search size={18} />
             <input
-              aria-label="חיפוש מקום"
+              aria-label={t.searchLabel}
               placeholder={
                 kind === "lodging"
-                  ? `מלון או דירה ב${destination}`
-                  : `מקום, מסעדה או אטרקציה ב${destination}`
+                  ? t.searchLodging(destination)
+                  : t.searchPlace(destination)
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -330,9 +336,7 @@ export function ActivityDialog({
             <small translate="no">Google Maps</small>
           </div>
         )}
-        {chosen && (
-          <p className="success-message">נבחר: {chosen} · Google Maps</p>
-        )}
+        {chosen && <p className="success-message">{t.chosen(chosen)}</p>}
         {error && (
           <p className="field-help" role="status">
             {error}
@@ -341,7 +345,7 @@ export function ActivityDialog({
         <form onSubmit={save}>
           {kind === "transport" && (
             <>
-              <div className="stop-kind" role="group" aria-label="אמצעי תחבורה">
+              <div className="stop-kind" role="group" aria-label={t.modeGroup}>
                 {(Object.keys(transportModes) as TransportMode[]).map((m) => (
                   <button
                     type="button"
@@ -351,31 +355,31 @@ export function ActivityDialog({
                     onClick={() => setMode(m)}
                   >
                     <ModeIcon mode={m} size={14} />
-                    {transportModes[m]}
+                    {common.transportModes[m]}
                   </button>
                 ))}
               </div>
               <div className="editor-fields">
                 <label className="field">
-                  <span>מאיפה</span>
+                  <span>{t.from}</span>
                   <input
-                    aria-label="מוצא"
+                    aria-label={t.fromAria}
                     maxLength={200}
                     value={from}
                     onChange={(e) => setFrom(e.target.value)}
                   />
                 </label>
                 <label className="field">
-                  <span>לאן</span>
+                  <span>{t.to}</span>
                   <input
-                    aria-label="יעד"
+                    aria-label={t.toAria}
                     maxLength={200}
                     value={to}
                     onChange={(e) => setTo(e.target.value)}
                   />
                 </label>
                 <label className="field">
-                  <span>שעת יציאה</span>
+                  <span>{t.departTime}</span>
                   <input
                     type="time"
                     dir="ltr"
@@ -384,7 +388,7 @@ export function ActivityDialog({
                   />
                 </label>
                 <label className="field">
-                  <span>שעת הגעה</span>
+                  <span>{t.arriveTime}</span>
                   <input
                     type="time"
                     dir="ltr"
@@ -393,20 +397,20 @@ export function ActivityDialog({
                   />
                 </label>
                 <label className="field">
-                  <span>הגעה ביום</span>
+                  <span>{t.arriveDay}</span>
                   <select
                     value={offset}
                     onChange={(e) =>
                       setOffset(Number(e.target.value) as 0 | 1 | 2)
                     }
                   >
-                    <option value={0}>אותו יום</option>
-                    <option value={1}>למחרת</option>
-                    <option value={2}>בעוד יומיים</option>
+                    <option value={0}>{t.sameDay}</option>
+                    <option value={1}>{t.nextDay}</option>
+                    <option value={2}>{t.twoDaysLater}</option>
                   </select>
                 </label>
                 <label className="field">
-                  <span>חברה / קו</span>
+                  <span>{t.carrier}</span>
                   <input
                     maxLength={100}
                     value={carrier}
@@ -418,7 +422,11 @@ export function ActivityDialog({
           )}
           {kind === "lodging" && (
             <>
-              <div className="stop-kind" role="group" aria-label="סוג לינה">
+              <div
+                className="stop-kind"
+                role="group"
+                aria-label={t.lodgingGroup}
+              >
                 {(Object.keys(lodgingKinds) as LodgingKind[]).map((k) => (
                   <button
                     type="button"
@@ -427,32 +435,32 @@ export function ActivityDialog({
                     aria-pressed={lodgingKind === k}
                     onClick={() => setLodgingKind(k)}
                   >
-                    {lodgingKinds[k]}
+                    {common.lodgingKinds[k]}
                   </button>
                 ))}
               </div>
               <div className="editor-fields">
                 <label className="field">
-                  <span>צ'ק-אין</span>
+                  <span>{common.checkIn}</span>
                   <input
                     type="date"
-                    aria-label="תאריך צ'ק-אין"
+                    aria-label={t.checkInDate}
                     value={checkIn}
                     onChange={(e) => setCheckIn(e.target.value)}
                   />
                 </label>
                 <label className="field">
-                  <span>צ'ק-אאוט</span>
+                  <span>{common.checkOut}</span>
                   <input
                     type="date"
-                    aria-label="תאריך צ'ק-אאוט"
+                    aria-label={t.checkOutDate}
                     min={checkIn}
                     value={checkOut}
                     onChange={(e) => setCheckOut(e.target.value)}
                   />
                 </label>
                 <label className="field">
-                  <span>שעת צ'ק-אין</span>
+                  <span>{t.checkInTime}</span>
                   <input
                     type="time"
                     dir="ltr"
@@ -461,7 +469,7 @@ export function ActivityDialog({
                   />
                 </label>
                 <label className="field">
-                  <span>שעת צ'ק-אאוט</span>
+                  <span>{t.checkOutTime}</span>
                   <input
                     type="time"
                     dir="ltr"
@@ -471,26 +479,24 @@ export function ActivityDialog({
                 </label>
               </div>
               <p className="field-help">
-                {nights >= 1 ? nightsLabel(nights) : "בחרו תאריכים"}
+                {nights >= 1 ? nightsLabel(nights) : t.chooseDates}
               </p>
             </>
           )}
           <div className="editor-fields">
             <label className="field">
-              <span>
-                {kind === "transport" ? "שם (לא חובה)" : "השם שלכם לתחנה"}
-              </span>
+              <span>{kind === "transport" ? t.nameOptional : t.nameLabel}</span>
               <input
-                aria-label="שם הפעילות"
+                aria-label={t.nameAria}
                 required={kind !== "transport"}
                 maxLength={200}
-                value={a.name === "מקום ללא שם" && !activity ? "" : a.name}
+                value={a.name === unnamed && !activity ? "" : a.name}
                 onChange={(e) => setA({ ...a, name: e.target.value })}
               />
             </label>
             {kind === "place" && (
               <label className="field">
-                <span>שעה / טווח שעות</span>
+                <span>{t.time}</span>
                 <input
                   dir="ltr"
                   placeholder="09:00–11:00"
@@ -502,7 +508,7 @@ export function ActivityDialog({
             )}
             {kind !== "place" && (
               <label className="field">
-                <span>מספר הזמנה (לא חובה)</span>
+                <span>{t.bookingRef}</span>
                 <input
                   dir="ltr"
                   maxLength={60}
@@ -517,9 +523,9 @@ export function ActivityDialog({
             )}
           </div>
           <label className="field">
-            <span>הערות לעצמכם</span>
+            <span>{t.notes}</span>
             <textarea
-              placeholder="להזמין מראש? קפה מומלץ בדרך?"
+              placeholder={t.notesPlaceholder}
               maxLength={2000}
               value={a.notes || ""}
               onChange={(e) => setA({ ...a, notes: e.target.value })}
@@ -527,15 +533,13 @@ export function ActivityDialog({
           </label>
           <fieldset>
             <legend>
-              {kind === "lodging"
-                ? "אומדן ללילה בשקלים · לא חובה"
-                : "אומדן עלות בשקלים · לא חובה"}
+              {kind === "lodging" ? t.estimatePerNight : t.estimateCost}
             </legend>
             <div className="estimate-fields">
               <label className="field">
-                <span>מ־</span>
+                <span>{t.estimateFrom}</span>
                 <input
-                  aria-label="עלות מינימלית"
+                  aria-label={t.minCost}
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -545,9 +549,9 @@ export function ActivityDialog({
                 />
               </label>
               <label className="field">
-                <span>עד</span>
+                <span>{t.estimateTo}</span>
                 <input
-                  aria-label="עלות מקסימלית"
+                  aria-label={t.maxCost}
                   type="number"
                   inputMode="decimal"
                   min={min || "0"}
@@ -557,38 +561,40 @@ export function ActivityDialog({
                 />
               </label>
               <label className="field">
-                <span>בסיס</span>
+                <span>{t.basis}</span>
                 <select
-                  aria-label="בסיס עלות"
+                  aria-label={t.basisAria}
                   value={basis}
                   onChange={(e) =>
                     setBasis(e.target.value as "person" | "group")
                   }
                 >
-                  <option value="person">לאדם</option>
-                  <option value="group">לקבוצה</option>
+                  <option value="person">{t.perPerson}</option>
+                  <option value="group">{t.perGroup}</option>
                 </select>
               </label>
             </div>
             {kind === "lodging" && nights >= 1 && (min || max) && (
-              <p className="field-help">הסכום יוכפל ב־{nightsLabel(nights)}</p>
+              <p className="field-help">
+                {t.multipliedBy(nightsLabel(nights))}
+              </p>
             )}
           </fieldset>
           <details className="manual-location">
-            <summary>עוד אפשרויות</summary>
+            <summary>{t.moreOptions}</summary>
             <div className="editor-fields">
               {kind === "place" && (
                 <label className="field">
-                  <span>קטגוריה</span>
+                  <span>{t.category}</span>
                   <select
                     value={a.category}
                     onChange={(e) =>
                       setA({ ...a, category: e.target.value as Category })
                     }
                   >
-                    {Object.entries(categories).map(([v, label]) => (
+                    {(Object.keys(categories) as Category[]).map((v) => (
                       <option key={v} value={v}>
-                        {label}
+                        {common.categories[v]}
                       </option>
                     ))}
                   </select>
@@ -596,9 +602,9 @@ export function ActivityDialog({
               )}
               {kind !== "lodging" && (
                 <label className="field">
-                  <span>כמות בחישוב העלות</span>
+                  <span>{t.quantity}</span>
                   <input
-                    aria-label="כמות"
+                    aria-label={t.quantityAria}
                     type="number"
                     inputMode="decimal"
                     min="1"
@@ -610,7 +616,7 @@ export function ActivityDialog({
               )}
             </div>
             <label className="field">
-              <span>תיאור קצר</span>
+              <span>{t.description}</span>
               <textarea
                 maxLength={1500}
                 value={a.description}
@@ -621,7 +627,7 @@ export function ActivityDialog({
               <>
                 {kind === "place" && (
                   <label className="field">
-                    <span>כתובת</span>
+                    <span>{t.address}</span>
                     <input
                       value={a.address}
                       onChange={(e) => setA({ ...a, address: e.target.value })}
@@ -629,7 +635,7 @@ export function ActivityDialog({
                   </label>
                 )}
                 <label className="field">
-                  <span>קישור להזמנה (https)</span>
+                  <span>{t.bookingUrl}</span>
                   <input
                     type="url"
                     dir="ltr"
@@ -642,18 +648,18 @@ export function ActivityDialog({
                 {kind === "place" && (
                   <div className="editor-fields">
                     <label className="field">
-                      <span>קו רוחב</span>
+                      <span>{t.latitude}</span>
                       <input
-                        aria-label="קו רוחב"
+                        aria-label={t.latitude}
                         value={lat}
                         onChange={(e) => setLat(e.target.value)}
                         dir="ltr"
                       />
                     </label>
                     <label className="field">
-                      <span>קו אורך</span>
+                      <span>{t.longitude}</span>
                       <input
-                        aria-label="קו אורך"
+                        aria-label={t.longitude}
                         value={lng}
                         onChange={(e) => setLng(e.target.value)}
                         dir="ltr"
@@ -665,7 +671,7 @@ export function ActivityDialog({
             )}
           </details>
           <Button type="submit" className="w-full mt-4">
-            {activity ? "שמירת השינויים" : "הוספה למסלול"}
+            {activity ? t.saveChanges : t.addToTrip}
             <Plus size={16} />
           </Button>
         </form>

@@ -6,6 +6,8 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4174",
     channel: process.platform === "win32" ? "msedge" : undefined,
+    // The site picks its language from the browser; these tests are in Hebrew.
+    locale: "he-IL",
     headless: true,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { hasSupabase } from "./config";
+import { currentLang, strings, type Lang } from "@/i18n";
 import type {
   PlaceDetails,
   PlacePhoto,
@@ -9,12 +10,20 @@ import type {
   PlaceArea,
 } from "@/types/itinerary";
 import type { Json } from "@/integrations/supabase/types";
+// Every call carries the site's language: the server answers errors in it,
+// and the AI writes in it.
 export async function invoke<T>(name: string, body: unknown): Promise<T> {
-  if (!hasSupabase)
-    throw new Error("השירות עדיין לא מחובר. אפשר לעיין באתר ולנסות שוב בהמשך.");
-  const { data, error } = await supabase.functions.invoke(name, { body });
+  const lang = currentLang(),
+    words = strings(lang).common.errors;
+  if (!hasSupabase) throw new Error(words.notConnected);
+  const { data, error } = await supabase.functions.invoke(name, {
+    body:
+      body && typeof body === "object" && !Array.isArray(body)
+        ? { ...body, lang }
+        : body,
+  });
   if (error) {
-    let message = "השירות לא זמין כרגע. אפשר לנסות שוב.";
+    let message = words.unavailable;
     try {
       const payload = await error.context?.json();
       if (typeof payload?.error === "string") message = payload.error;
@@ -37,7 +46,7 @@ export async function searchPlaces(
   query: string,
   destination: string,
   tripId?: string,
-  language: "he" | "en" = "he",
+  language: Lang = "he",
   /** Google's free tier: place IDs only, no names or coordinates. */
   idsOnly = false,
   /** Bias the search here instead of the destination as a whole. */
@@ -69,8 +78,21 @@ export async function searchPlaces(
     );
   return request;
 }
-export const getPlace = (placeId: string, access: TripAccess) =>
-  invoke<PlaceDetails>("places", { action: "details", placeId, ...access });
+/**
+ * A stop's Google details in the trip's language, like the rest of the trip:
+ * the name is matched against the stop's own, and the details are kept in it.
+ */
+export const getPlace = (
+  placeId: string,
+  access: TripAccess,
+  language: Lang = currentLang(),
+) =>
+  invoke<PlaceDetails>("places", {
+    action: "details",
+    placeId,
+    language,
+    ...access,
+  });
 export const getPhoto = (placeId: string, access: TripAccess) =>
   invoke<PlacePhoto>("place-photo", { placeId, ...access });
 export const getRoute = (
@@ -93,9 +115,9 @@ export async function savePlan(id: string, revision: number, plan: TripPlan) {
     error?.message?.includes("trip_conflict_or_forbidden")
   )
     throw new SaveConflict(
-      "הטיול השתנה בלשונית אחרת. השינויים שלך נשמרו במכשיר.",
+      strings().common.errors.conflict,
     );
   if (error || !data?.[0])
-    throw new Error("השמירה לא הצליחה. השינויים נשמרו במכשיר ואפשר לנסות שוב.");
+    throw new Error(strings().common.errors.saveFailed);
   return data[0].revision;
 }

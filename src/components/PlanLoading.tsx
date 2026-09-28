@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { RippleLoader } from "@/components/ui/ripple-loader";
 import { beat, easeInOut } from "@/lib/motion";
+import { useT } from "@/i18n";
 type Stage = "composing" | "placing" | null;
 const CoverContext = createContext<(stage: Stage) => void>(() => undefined);
 // One cover for the whole app, above the routes. Creating a trip with the AI
@@ -26,6 +27,7 @@ export const usePlanCover = () => useContext(CoverContext);
 // 0.667s) to reveal the plan.
 function PlanLoading({ stage }: { stage: Stage }) {
   const reduce = useReducedMotion();
+  const words = useT().trip.cover;
   return (
     <AnimatePresence>
       {stage && (
@@ -46,11 +48,9 @@ function PlanLoading({ stage }: { stage: Stage }) {
         >
           <RippleLoader />
           <strong>
-            {stage === "composing"
-              ? "מחברים את כל הרעיונות למסלול…"
-              : "מאתרים את המקומות על המפה…"}
+            {stage === "composing" ? words.composing : words.placing}
           </strong>
-          <p>זה יכול לקחת מעט זמן. הטיול כבר נשמר.</p>
+          <p>{words.note}</p>
         </motion.div>
       )}
     </AnimatePresence>

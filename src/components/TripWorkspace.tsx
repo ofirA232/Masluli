@@ -97,18 +97,19 @@ import { useLiveLocation } from "@/hooks/useLiveLocation";
 import {
   daySpread,
   distanceLabel,
-  formatDistance,
   isolationLimit,
   localDate,
   metresBetween,
   middleOf,
   nearestOf,
+  spreadGap,
   tightenRequest,
   todayCues,
   tooSpread,
 } from "@/lib/nearby";
 import { beat, cssEase, easeInOut, power2In } from "@/lib/motion";
 import { supabase } from "@/integrations/supabase/client";
+import { dirOf, useLang, useT } from "@/i18n";
 import type {
   Activity,
   Coordinates,
@@ -148,6 +149,11 @@ export function TripWorkspace({
     { plan, edit, status } = document;
   const location = useLocation(),
     navigate = useNavigate();
+  const t = useT(),
+    words = t.trip.workspace,
+    { lang } = useLang();
+  // The trip's own words (its title, its stops) read in its language.
+  const tripDir = dirOf(plan.metadata.language);
   // On a trip day the workspace opens on that day.
   const [day, setDay] = useState<number | "all">(() => {
       const today = localDate();
@@ -301,8 +307,14 @@ export function TripWorkspace({
   const queryClient = useQueryClient();
   const prefetched = useQueries({
     queries: linked.map(({ placeId, cachedPlace }) => ({
-      queryKey: ["place", access.tripId, access.shareToken, placeId],
-      queryFn: () => getPlace(placeId, access),
+      queryKey: [
+        "place",
+        access.tripId,
+        access.shareToken,
+        placeId,
+        plan.metadata.language,
+      ],
+      queryFn: () => getPlace(placeId, access, plan.metadata.language),
       initialData: cachedPlace,
       staleTime: Infinity,
       gcTime: 60 * 60 * 1000,
@@ -444,12 +456,12 @@ export function TripWorkspace({
     if (!original.metadata.startDate || !original.metadata.endDate) {
       setGenerating(false);
       setSettings(true);
-      toast("בחרו תאריכים לפני יצירת מסלול");
+      toast(words.pickDatesFirst);
       return;
     }
     if (
       original.days.some((d) => d.activities.length) &&
-      !window.confirm("יצירת מסלול חדש תחליף את התחנות המשובצות. להמשיך?")
+      !window.confirm(words.confirmRegenerate)
     ) {
       setGenerating(false);
       return;
@@ -465,6 +477,7 @@ export function TripWorkspace({
         travelers: original.metadata.travelers,
         interests: original.metadata.interests,
         gettingAround: original.metadata.gettingAround ?? undefined,
+        tripLang: original.metadata.language,
         budget:
           original.metadata.targetBudget === null
             ? undefined
@@ -475,7 +488,7 @@ export function TripWorkspace({
         result.days.length !== original.days.length ||
         result.days.some((d) => !Array.isArray(d.activities))
       )
-        throw new Error("התקבל מסלול חלקי. אפשר לנסות שוב או להמשיך ידנית.");
+        throw new Error(words.partialPlan);
       if (!alive.current) return;
       edit((p) => ({
         ...p,
@@ -493,7 +506,7 @@ export function TripWorkspace({
       announceReady.current = true;
     } catch (e) {
       if (alive.current)
-        setAiError(e instanceof Error ? e.message : "יצירת המסלול נכשלה");
+        setAiError(e instanceof Error ? e.message : words.generateFailed);
     } finally {
       if (alive.current) setGenerating(false);
     }
@@ -552,8 +565,14 @@ export function TripWorkspace({
             // A failed details call just falls through to the named search.
             const place = await queryClient
               .fetchQuery({
-                queryKey: ["place", access.tripId, access.shareToken, top],
-                queryFn: () => getPlace(top, access),
+                queryKey: [
+                  "place",
+                  access.tripId,
+                  access.shareToken,
+                  top,
+                  plan.metadata.language,
+                ],
+                queryFn: () => getPlace(top, access, plan.metadata.language),
                 staleTime: Infinity,
               })
               .catch(() => null);
@@ -570,7 +589,7 @@ export function TripWorkspace({
             english || a.name,
             destination,
             access.tripId,
-            english ? "en" : "he",
+            english ? "en" : plan.metadata.language,
           );
           area = named.area ?? area;
           match = pickPlace(names, named.places);
@@ -645,7 +664,7 @@ export function TripWorkspace({
           english || a.name,
           plan.metadata.destination,
           access.tripId,
-          english ? "en" : "he",
+          english ? "en" : plan.metadata.language,
           false,
           { ...middle, radius: limit },
         );
@@ -698,16 +717,17 @@ export function TripWorkspace({
   useEffect(() => {
     if (covered || !announceReady.current) return;
     announceReady.current = false;
-    toast.success("המסלול מוכן. עכשיו אפשר להפוך אותו לשלכם.");
-  }, [covered]);
+    toast.success(words.ready);
+  }, [covered, words.ready]);
   // The cover itself lives above the routes (PlanCoverProvider); set before
   // paint so it never drops for a frame between the trip loader and here.
   // The traveller's own position (stays in the browser); the map's locate
   // button turns it on.
   const me = useLiveLocation();
   useEffect(() => {
-    if (me.status === "denied")
-      toast("הגישה למיקום חסומה. אפשר לאפשר אותה בהגדרות האתר בדפדפן.");
+    if (me.status === "denied") toast(words.locationDenied);
+    // Only a change of status is news; a change of language is not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.status]);
   const setCover = usePlanCover();
   useLayoutEffect(() => {
@@ -734,6 +754,7 @@ export function TripWorkspace({
       const result = await invoke<RefineResponse>("refine-itinerary", {
         ...compactPlan(before, focus, message),
         tripId: record.id,
+        tripLang: before.metadata.language,
       });
       if (!alive.current) return;
       const { plan: next, summary } = mergeRefinement(
@@ -754,7 +775,7 @@ export function TripWorkspace({
           role: "assistant",
           text:
             result.reply ||
-            (changed ? "עדכנתי את המסלול." : "לא שיניתי דבר במסלול."),
+            (changed ? t.trip.refine.changed : t.trip.refine.unchanged),
           summary: changed ? summary : undefined,
           canUndo: changed,
         },
@@ -766,7 +787,7 @@ export function TripWorkspace({
           {
             id: uid(),
             role: "error",
-            text: e instanceof Error ? e.message : "העדכון נכשל",
+            text: e instanceof Error ? e.message : t.trip.refine.failed,
           },
         ]);
     } finally {
@@ -781,7 +802,7 @@ export function TripWorkspace({
     setChat((c) =>
       c.map((m) => (m.id === id ? { ...m, canUndo: false, undone: true } : m)),
     );
-    toast("השינוי בוטל");
+    toast(t.trip.refine.undone);
   };
   const swap = async (a: Activity, dayNumber: number | "saved") => {
     setSwapping(a.id);
@@ -793,8 +814,9 @@ export function TripWorkspace({
         day_number: dayNumber === "saved" ? 1 : dayNumber,
         time_slot: Number(a.time.slice(0, 2)) < 12 ? "Morning" : "Afternoon",
         rejected_activity_name: a.name,
+        tripLang: plan.metadata.language,
       });
-      if (!result?.name) throw new Error("לא התקבלה פעילות חלופית");
+      if (!result?.name) throw new Error(words.noAlternative);
       const next = {
         ...normalizeActivity({ ...result, id: uid(), source: "ai" }, "ai"),
         notes: a.notes,
@@ -808,7 +830,7 @@ export function TripWorkspace({
         saved_places: p.saved_places.map((v) => (v.id === a.id ? next : v)),
       }));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "ההחלפה נכשלה");
+      toast.error(e instanceof Error ? e.message : words.swapFailed);
     } finally {
       setSwapping(null);
     }
@@ -816,30 +838,28 @@ export function TripWorkspace({
   const share = async () => {
     if (
       !readOnly &&
-      !window.confirm(
-        "כל מי שמחזיק בקישור יוכל לצפות במסלול, בהערות ובתקציב. ליצור קישור?",
-      )
+      !window.confirm(words.confirmShare)
     )
       return;
     setSharing(true);
     try {
       if (!(await document.flush()))
-        throw new Error("יש לשמור את השינויים לפני השיתוף.");
+        throw new Error(words.saveBeforeShare);
       let token = shareToken;
       if (!readOnly) {
         const { data, error } = await supabase.rpc("create_share_link", {
           p_id: record.id,
         });
-        if (error || !data) throw new Error("יצירת קישור השיתוף נכשלה");
+        if (error || !data) throw new Error(words.shareLinkFailed);
         token = data;
       }
-      if (!token) throw new Error("קישור השיתוף אינו זמין");
+      if (!token) throw new Error(words.shareLinkUnavailable);
       await navigator.clipboard.writeText(
         `${window.location.origin}/trip/${record.id}?share_token=${encodeURIComponent(token)}`,
       );
-      toast.success("הקישור הועתק. אפשר לשלוח לשותפים לדרך.");
+      toast.success(words.linkCopied);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "השיתוף נכשל");
+      toast.error(e instanceof Error ? e.message : words.shareFailed);
     } finally {
       setSharing(false);
     }
@@ -931,7 +951,9 @@ export function TripWorkspace({
     (a.source === "manual" ? a.coordinates : undefined);
   const nearby = (a: Activity) => {
     const at = placeOf(a);
-    return me.here && at ? distanceLabel(metresBetween(me.here, at)) : null;
+    return me.here && at
+      ? distanceLabel(metresBetween(me.here, at), lang)
+      : null;
   };
   // A day whose linked stops sit too far apart for how the trip gets around
   // (a walking day with 14 km between two stops, or a stop linked to the
@@ -1016,7 +1038,7 @@ export function TripWorkspace({
                   edit((p) => moveActivity(p, a.id, d, index))
                 }
                 onDelete={() => {
-                  if (window.confirm("להסיר את התחנה מהטיול?"))
+                  if (window.confirm(words.confirmRemoveStop))
                     edit((p) => ({
                       ...p,
                       days: p.days.map((d) => ({
@@ -1041,15 +1063,14 @@ export function TripWorkspace({
                     ) : (
                       <Car size={13} />
                     )}
-                    כ־
-                    {Math.ceil(
-                      route.data.legs[legAfter.get(a.id)!].duration / 60,
-                    )}{" "}
-                    דקות ·{" "}
-                    {(
-                      route.data.legs[legAfter.get(a.id)!].distance / 1000
-                    ).toFixed(1)}{" "}
-                    ק״מ
+                    {words.leg(
+                      Math.ceil(
+                        route.data.legs[legAfter.get(a.id)!].duration / 60,
+                      ),
+                      (
+                        route.data.legs[legAfter.get(a.id)!].distance / 1000
+                      ).toFixed(1),
+                    )}
                   </div>
                 )}
             </motion.div>
@@ -1065,9 +1086,7 @@ export function TripWorkspace({
             loading="lazy"
           />
           <p>
-            {target === "saved"
-              ? "מצאתם מקום מעניין? שמרו אותו כאן ליום הנכון."
-              : "יום שלם של אפשרויות. מה התחנה הראשונה?"}
+            {target === "saved" ? words.emptySaved : words.emptyDay}
           </p>
         </div>
       )}
@@ -1077,7 +1096,7 @@ export function TripWorkspace({
           onClick={() => setDialog({ activity: null, day: target })}
         >
           <Plus size={17} />
-          הוספת תחנה
+          {words.addStop}
         </button>
       )}
     </DayDrop>
@@ -1090,48 +1109,51 @@ export function TripWorkspace({
       <div className="trip-toolbar">
         <button
           className="back-to-trips"
-          aria-label="חזרה לטיולים שלי"
+          aria-label={words.backToTrips}
           onClick={async () => {
             if (readOnly || (await document.flush())) navigate("/my-trips");
             else
-              toast.error(
-                "השינויים טרם נשמרו. אפשר לנסות שוב או לייצא את הטיוטה.",
-              );
+              toast.error(words.unsaved);
           }}
         >
+          {/* Back points the way the page reads from. */}
           <ArrowRight size={20} />
         </button>
         <div className="toolbar-title">
-          <span>{plan.metadata.destination}</span>
-          <strong>{plan.metadata.title}</strong>
+          <span>
+            <bdi dir={tripDir}>{plan.metadata.destination}</bdi>
+          </span>
+          <strong>
+            <bdi dir={tripDir}>{plan.metadata.title}</bdi>
+          </strong>
         </div>
         <div className="save-status" role="status">
           {readOnly ? (
             <>
               <Bookmark size={14} />
-              תצוגה משותפת
+              {words.sharedView}
             </>
           ) : status === "saved" ? (
             <>
               <Check size={14} />
-              כל השינויים נשמרו
+              {words.allSaved}
             </>
           ) : status === "error" || status === "conflict" ? (
             <>
               <AlertCircle size={14} />
-              ממתין לשמירה
+              {words.waitingToSave}
             </>
           ) : (
             <>
               <CloudUpload size={14} />
-              {status === "saving" ? "שומרים…" : "שינויים חדשים"}
+              {status === "saving" ? words.saving : words.newChanges}
             </>
           )}
         </div>
         <Button
           variant="ghost"
           size="icon"
-          aria-label="הדפסה או שמירה כ־PDF"
+          aria-label={words.print}
           onClick={() => window.print()}
         >
           <Printer />
@@ -1140,7 +1162,7 @@ export function TripWorkspace({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="פרטי הטיול והמטיילים"
+            aria-label={words.settings}
             onClick={() => setSettings(true)}
           >
             <Settings2 />
@@ -1152,7 +1174,7 @@ export function TripWorkspace({
           onClick={() => void share()}
         >
           {sharing ? <Loader2 className="animate-spin" /> : <Share2 />}
-          <span>שיתוף</span>
+          <span>{words.share}</span>
         </Button>
       </div>
       {document.error && (
@@ -1160,11 +1182,11 @@ export function TripWorkspace({
           <span>{document.error}</span>
           {status !== "conflict" && (
             <Button size="sm" onClick={() => void document.flush()}>
-              ניסיון שמירה נוסף
+              {words.retrySave}
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={document.download}>
-            הורדת הטיוטה
+            {words.downloadDraft}
           </Button>
           {status === "conflict" && (
             <Button
@@ -1172,14 +1194,12 @@ export function TripWorkspace({
               variant="outline"
               onClick={() => {
                 if (
-                  window.confirm(
-                    "לטעון את הגרסה שבשרת ולוותר על השינויים המקומיים? אפשר להוריד אותם קודם.",
-                  )
+                  window.confirm(words.confirmDiscard)
                 )
                   document.discard();
               }}
             >
-              טעינת גרסת השרת
+              {words.loadServer}
             </Button>
           )}
         </div>
@@ -1188,17 +1208,17 @@ export function TripWorkspace({
         <aside className="trip-sidebar">
           <div className="sidebar-trip">
             <Compass size={26} />
-            <strong>ההרפתקה שלכם</strong>
+            <strong>{words.adventure}</strong>
             <span>
-              {plan.days.length} ימים · {plan.metadata.travelers} מטיילים
+              {words.summary(plan.days.length, plan.metadata.travelers)}
             </span>
           </div>
-          <nav aria-label="ניווט בטיול">
+          <nav aria-label={words.tripNav}>
             {[
-              { id: "itinerary", label: "המסלול שלי", icon: List },
-              { id: "saved", label: "מקומות ששמרתי", icon: Bookmark },
-              { id: "budget", label: "תקציב והוצאות", icon: Wallet },
-              { id: "notes", label: "הערות לדרך", icon: FileText },
+              { id: "itinerary", label: words.tabs.itinerary, icon: List },
+              { id: "saved", label: words.tabs.saved, icon: Bookmark },
+              { id: "budget", label: words.tabs.budget, icon: Wallet },
+              { id: "notes", label: words.tabs.notes, icon: FileText },
             ].map((item) => (
               <button
                 key={item.id}
@@ -1218,7 +1238,7 @@ export function TripWorkspace({
             ))}
           </nav>
           <div className="sidebar-days">
-            <span className="eyebrow">יום אחרי יום</span>
+            <span className="eyebrow">{words.dayByDay}</span>
             <button
               onClick={() => {
                 setDay("all");
@@ -1227,7 +1247,7 @@ export function TripWorkspace({
               className={day === "all" ? "active" : ""}
             >
               {day === "all" && <ActivePill group="sidebar-day" />}
-              כל הטיול
+              {words.wholeTrip}
             </button>
             {plan.days.map((d) => (
               <button
@@ -1246,13 +1266,15 @@ export function TripWorkspace({
                   }}
                 />
                 <div>
-                  יום {d.day_number}
+                  {words.day(d.day_number)}
                   {d.day_number === todayNumber && (
-                    <em className="today-mark">היום</em>
+                    <em className="today-mark">{words.today}</em>
                   )}
                   <small>
                     {formatDate(
                       dayDate(plan.metadata.startDate, d.day_number - 1),
+                      false,
+                      lang,
                     )}
                   </small>
                 </div>
@@ -1263,23 +1285,23 @@ export function TripWorkspace({
           <div className="sidebar-note">
             <Sparkles size={18} />
             <p>
-              השאירו קצת מקום
+              {words.noteTop}
               <br />
-              גם למה שלא תכננתם.
+              {words.noteBottom}
             </p>
           </div>
         </aside>
         <div className="workspace-main">
           <div className="mobile-trip-tabs">
             <select
-              aria-label="תצוגת טיול"
+              aria-label={words.viewSelect}
               value={tab}
               onChange={(e) => setTab(e.target.value as typeof tab)}
             >
-              <option value="itinerary">המסלול שלי</option>
-              <option value="saved">מקומות ששמרתי</option>
-              <option value="budget">תקציב והוצאות</option>
-              <option value="notes">הערות לדרך</option>
+              <option value="itinerary">{words.tabs.itinerary}</option>
+              <option value="saved">{words.tabs.saved}</option>
+              <option value="budget">{words.tabs.budget}</option>
+              <option value="notes">{words.tabs.notes}</option>
             </select>
             <button
               className={!mobileMap ? "active" : ""}
@@ -1287,7 +1309,7 @@ export function TripWorkspace({
             >
               {!mobileMap && <ActivePill group="mobile-view" />}
               <List size={16} />
-              רשימה
+              {words.list}
             </button>
             <button
               className={mobileMap ? "active" : ""}
@@ -1295,7 +1317,7 @@ export function TripWorkspace({
             >
               {mobileMap && <ActivePill group="mobile-view" />}
               <MapIcon size={16} />
-              מפה
+              {words.map}
             </button>
           </div>
           <div className="workspace-panels">
@@ -1308,18 +1330,20 @@ export function TripWorkspace({
                 <div>
                   <span className="eyebrow light">
                     <MapPin size={13} />
-                    {plan.metadata.destination}
+                    <bdi dir={tripDir}>{plan.metadata.destination}</bdi>
                   </span>
-                  <h1>{plan.metadata.title}</h1>
+                  <h1>
+                    <bdi dir={tripDir}>{plan.metadata.title}</bdi>
+                  </h1>
                   <p>
                     <CalendarDays size={14} />
-                    {formatDate(plan.metadata.startDate)}
+                    {formatDate(plan.metadata.startDate, false, lang)}
                     {plan.metadata.endDate
-                      ? " — " + formatDate(plan.metadata.endDate)
+                      ? " — " + formatDate(plan.metadata.endDate, false, lang)
                       : ""}
                     <span>·</span>
                     <Users size={14} />
-                    {plan.metadata.travelers} מטיילים
+                    {words.travelers(plan.metadata.travelers)}
                   </p>
                 </div>
               </div>
@@ -1328,8 +1352,8 @@ export function TripWorkspace({
                   <>
                     <div className="itinerary-controls">
                       <div>
-                        <h2>הדרך שלכם מתחילה כאן</h2>
-                        <p>מקומות, חוויות וכל מה שביניהם.</p>
+                        <h2>{words.heading}</h2>
+                        <p>{words.subheading}</p>
                       </div>
                       {!readOnly && (
                         <Button
@@ -1343,7 +1367,7 @@ export function TripWorkspace({
                           ) : (
                             <Sparkles />
                           )}
-                          הצעת AI
+                          {words.aiSuggest}
                         </Button>
                       )}
                     </div>
@@ -1353,7 +1377,7 @@ export function TripWorkspace({
                         onClick={() => setDay("all")}
                       >
                         {day === "all" && <ActivePill group="day-chip" />}
-                        כל הימים
+                        {words.allDays}
                       </button>
                       {plan.days.map((d) => (
                         <button
@@ -1364,9 +1388,9 @@ export function TripWorkspace({
                           {day === d.day_number && (
                             <ActivePill group="day-chip" />
                           )}
-                          יום {d.day_number}
+                          {words.day(d.day_number)}
                           {d.day_number === todayNumber && (
-                            <em className="today-mark">היום</em>
+                            <em className="today-mark">{words.today}</em>
                           )}
                         </button>
                       ))}
@@ -1384,7 +1408,7 @@ export function TripWorkspace({
                       <div className="form-error" role="alert">
                         {aiError}
                         <button onClick={() => void generate()}>
-                          ניסיון נוסף
+                          {words.retry}
                         </button>
                       </div>
                     )}
@@ -1398,8 +1422,7 @@ export function TripWorkspace({
                   onDragCancel={settleDrag}
                   accessibility={{
                     screenReaderInstructions: {
-                      draggable:
-                        "לחצו רווח כדי להרים תחנה, השתמשו בחצים להזזה וברווח להנחה. ניתן גם להשתמש בכפתורי ההעברה.",
+                      draggable: words.dragInstructions,
                     },
                   }}
                 >
@@ -1426,10 +1449,11 @@ export function TripWorkspace({
                                       d.day_number - 1,
                                     ),
                                     true,
+                                    lang,
                                   )
-                                : `יום ${d.day_number}`}
+                                : words.day(d.day_number)}
                             </h3>
-                            <small>{d.activities.length} תחנות בדרך</small>
+                            <small>{words.stops(d.activities.length)}</small>
                           </div>
                         </div>
                         {(() => {
@@ -1437,15 +1461,15 @@ export function TripWorkspace({
                           const around = plan.metadata.gettingAround;
                           if (!spread || !tooSpread(spread, around))
                             return null;
-                          const gap = `${formatDistance(spread.longest)} בין ${spread.from} לבין ${spread.to}`;
+                          const gap = spreadGap(spread, lang);
                           return (
                             <div className="day-spread" role="note">
                               <span>
                                 {around === "foot"
-                                  ? `היום הזה מפוזר להליכה: ${gap}.`
+                                  ? words.spreadFoot(gap)
                                   : around === "car"
-                                    ? `ביום הזה יש הרבה נהיגה: ${gap}.`
-                                    : `היום הזה מפוזר: ${gap}.`}
+                                    ? words.spreadCar(gap)
+                                    : words.spread(gap)}
                               </span>
                               {!locked && (
                                 <button
@@ -1457,12 +1481,13 @@ export function TripWorkspace({
                                         d.day_number,
                                         spread,
                                         around,
+                                        lang,
                                       ),
                                       d.day_number,
                                     )
                                   }
                                 >
-                                  צמצום היום
+                                  {words.tighten}
                                 </button>
                               )}
                             </div>
@@ -1480,8 +1505,8 @@ export function TripWorkspace({
                       <div className="panel-title">
                         <Bookmark />
                         <div>
-                          <h2>מקומות ששמרתי</h2>
-                          <p>רעיונות טובים מחכים ליום הנכון.</p>
+                          <h2>{words.tabs.saved}</h2>
+                          <p>{words.savedText}</p>
                         </div>
                       </div>
                       {renderActivities(plan.saved_places, "saved", "#8272bb")}
@@ -1496,19 +1521,16 @@ export function TripWorkspace({
                     <div className="panel-title">
                       <FileText />
                       <div>
-                        <h2>הערות לדרך</h2>
-                        <p>
-                          הדברים הקטנים שכדאי לזכור. ההערות נכללות בקישור
-                          השיתוף.
-                        </p>
+                        <h2>{words.tabs.notes}</h2>
+                        <p>{words.notesText}</p>
                       </div>
                     </div>
                     <textarea
-                      aria-label="הערות לטיול"
+                      aria-label={words.notesLabel}
                       readOnly={locked}
                       value={plan.notes}
                       maxLength={10000}
-                      placeholder="רשימת אריזה, המלצה מחבר או כתובת של בית הקפה ההוא…"
+                      placeholder={words.notesPlaceholder}
                       onChange={(e) => edit({ ...plan, notes: e.target.value })}
                     />
                   </section>
@@ -1519,11 +1541,11 @@ export function TripWorkspace({
               <div className="map-topbar">
                 <span>
                   <MapPin size={16} />
-                  המקומות שלכם
+                  {words.yourPlaces}
                 </span>
                 <div>
                   <button
-                    aria-label="מסלולי הליכה"
+                    aria-label={words.walkRoutes}
                     className={mode === "WALK" ? "active" : ""}
                     onClick={() => setMode("WALK")}
                   >
@@ -1531,7 +1553,7 @@ export function TripWorkspace({
                     <Footprints size={16} />
                   </button>
                   <button
-                    aria-label="מסלולי נהיגה"
+                    aria-label={words.driveRoutes}
                     className={mode === "DRIVE" ? "active" : ""}
                     onClick={() => setMode("DRIVE")}
                   >
@@ -1562,26 +1584,24 @@ export function TripWorkspace({
                 )}
               </Suspense>
               <div className="map-summary">
-                <span>{mapActivities.length} מקומות על המפה</span>
+                <span>{words.onMap(mapActivities.length)}</span>
                 {canRoute && route.data && (
                   <strong>
-                    {Math.ceil(route.data.duration / 60)} דקות ·{" "}
-                    {(route.data.distance / 1000).toFixed(1)} ק״מ
+                    {words.routeTotal(
+                      Math.ceil(route.data.duration / 60),
+                      (route.data.distance / 1000).toFixed(1),
+                    )}
                   </strong>
                 )}
                 {canRoute && route.error && (
                   <small>
-                    זמני המעבר אינם זמינים כרגע{" "}
+                    {words.routeUnavailable}{" "}
                     <button onClick={() => void route.refetch()}>
-                      ניסיון נוסף
+                      {words.retry}
                     </button>
                   </small>
                 )}
-                {!canRoute && (
-                  <small>
-                    זמני מעבר מוצגים ביום שבו כל התחנות מקושרות למקומות.
-                  </small>
-                )}
+                {!canRoute && <small>{words.routeNeedsLinks}</small>}
               </div>
             </aside>
           </div>
@@ -1597,7 +1617,7 @@ export function TripWorkspace({
           <DrawerContent className="activity-preview">
             <DrawerTitle className="sr-only">{sheet.activity.name}</DrawerTitle>
             <DrawerDescription className="sr-only">
-              פרטי התחנה שנבחרה במפה
+              {words.previewDescription}
             </DrawerDescription>
             <ActivityCard
               key={sheet.activity.id}
@@ -1619,7 +1639,7 @@ export function TripWorkspace({
                 edit((p) => moveActivity(p, sheet.activity.id, d, index))
               }
               onDelete={() => {
-                if (window.confirm("להסיר את התחנה מהטיול?")) {
+                if (window.confirm(words.confirmRemoveStop)) {
                   const id = sheet.activity.id;
                   setPreview(null);
                   edit((p) => ({

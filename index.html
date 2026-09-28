@@ -2,6 +2,27 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
+    <!-- Language and direction before the first paint (same rules as
+         src/i18n/lang.ts): a remembered choice, else the browser's language. -->
+    <script>
+      (function () {
+        var saved = null;
+        try {
+          saved = localStorage.getItem("planatrip:lang");
+        } catch (e) {}
+        var langs = navigator.languages || [navigator.language];
+        var lang =
+          saved === "he" || saved === "en"
+            ? saved
+            : Array.prototype.some.call(langs, function (l) {
+                  return /^(he|iw)\b/i.test(l || "");
+                })
+              ? "he"
+              : "en";
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Masluli — כל הטיול, במקום אחד</title>
     <meta name="description" content="תכנון טיולים חכם ומותאם אישית" />

@@ -4,15 +4,17 @@ import {
   budgetTotals,
   dayDate,
   formatDate,
-  lodgingKinds,
   lodgingNights,
   money,
   staysForDay,
-  transportModes,
 } from "@/lib/trips";
+import { useT } from "@/i18n";
 
 // Prints only saved planning data; transient provider data is never exported.
 export function PrintTrip({ plan }: { plan: TripPlan }) {
+  const words = useT(),
+    t = words.print,
+    common = words.common;
   const totals = budgetTotals(plan);
   const activities = (items: Activity[]) =>
     items.length ? (
@@ -25,24 +27,24 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
             </h3>
             {a.transport && (
               <p>
-                {transportModes[a.transport.mode]}
+                {common.transportModes[a.transport.mode]}
                 {a.transport.from || a.transport.to
-                  ? `: ${a.transport.from} ← ${a.transport.to}`
+                  ? `: ${t.route(a.transport.from, a.transport.to)}`
                   : ""}
                 {a.transport.carrier ? ` · ${a.transport.carrier}` : ""}
                 {a.transport.booking_ref
-                  ? ` · הזמנה ${a.transport.booking_ref}`
+                  ? ` · ${t.booking(a.transport.booking_ref)}`
                   : ""}
               </p>
             )}
             {a.lodging && (
               <p>
-                {lodgingKinds[a.lodging.kind]} · צ'ק-אין{" "}
-                {formatDate(a.lodging.check_in)} · צ'ק-אאוט{" "}
-                {formatDate(a.lodging.check_out)} · {lodgingNights(a.lodging)}{" "}
-                לילות
+                {common.lodgingKinds[a.lodging.kind]} · {common.checkIn}{" "}
+                {formatDate(a.lodging.check_in)} · {common.checkOut}{" "}
+                {formatDate(a.lodging.check_out)} ·{" "}
+                {t.nights(lodgingNights(a.lodging))}
                 {a.lodging.booking_ref
-                  ? ` · הזמנה ${a.lodging.booking_ref}`
+                  ? ` · ${t.booking(a.lodging.booking_ref)}`
                   : ""}
               </p>
             )}
@@ -51,23 +53,23 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
             {a.notes && <p className="print-notes">{a.notes}</p>}
             <small>
               {a.estimate
-                ? `${money(a.estimate.min)}–${money(a.estimate.max)} · ${a.estimate.basis === "person" ? "לאדם" : "לקבוצה"} · כמות ${a.estimate.quantity}${a.estimate.source === "ai" ? " · אומדן AI" : ""}`
-                : "עלות לא ידועה"}
+                ? `${money(a.estimate.min)}–${money(a.estimate.max)} · ${a.estimate.basis === "person" ? t.perPerson : t.perGroup} · ${t.quantity(a.estimate.quantity)}${a.estimate.source === "ai" ? ` · ${t.aiEstimate}` : ""}`
+                : t.unknownCost}
             </small>
           </li>
         ))}
       </ol>
     ) : (
-      <p>יום פתוח לחוויות חדשות.</p>
+      <p>{t.openDay}</p>
     );
   return (
-    <section className="print-trip" aria-label="מסלול מלא להדפסה">
+    <section className="print-trip" aria-label={t.ariaLabel}>
       <header>
         <strong>Masluli</strong>
         <h1>{plan.metadata.title}</h1>
         <p>
-          {plan.metadata.destination} · {plan.days.length} ימים ·{" "}
-          {plan.metadata.travelers} מטיילים
+          {plan.metadata.destination} · {t.days(plan.days.length)} ·{" "}
+          {t.travelers(plan.metadata.travelers)}
         </p>
         {plan.metadata.startDate && (
           <p>
@@ -79,14 +81,14 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
       {plan.days.map((d) => (
         <section key={d.day_number} className="print-day">
           <h2>
-            יום {d.day_number}
+            {t.day(d.day_number)}
             {dayDate(plan.metadata.startDate, d.day_number - 1) &&
               ` · ${formatDate(dayDate(plan.metadata.startDate, d.day_number - 1))}`}
           </h2>
           {staysForDay(plan, d.day_number).map((s) => (
             <p key={s.activity.id} className="print-stay">
-              לינה: {s.activity.name} ·{" "}
-              {s.checkout ? "צ'ק-אאוט" : `לילה ${s.night} מתוך ${s.nights}`}
+              {t.stay(s.activity.name)} ·{" "}
+              {s.checkout ? common.checkOut : common.nightOf(s.night, s.nights)}
             </p>
           ))}
           {activities(d.activities)}
@@ -94,40 +96,39 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
       ))}
       {!!plan.saved_places.length && (
         <section>
-          <h2>מקומות שטרם שובצו</h2>
+          <h2>{t.unscheduled}</h2>
           {activities(plan.saved_places)}
         </section>
       )}
       <section className="print-budget">
-        <h2>תקציב והוצאות · ₪</h2>
+        <h2>{t.budgetTitle}</h2>
         <p>
-          תקציב שהוגדר:{" "}
+          {t.budgetSet}{" "}
           {plan.metadata.targetBudget === null
-            ? "לא הוגדר"
+            ? t.notSet
             : money(plan.metadata.targetBudget)}
         </p>
         <p>
-          אומדן לתחנות המשובצות עם עלות ידועה:{" "}
+          {t.estimate}{" "}
           {plan.days.some((d) => d.activities.some((a) => a.estimate))
             ? `${money(totals.min)}–${money(totals.max)}`
-            : "עדיין לא ידוע"}
+            : t.unknownYet}
         </p>
         <p>
-          {totals.unknown} תחנות ללא אומדן · הוצאות בפועל:{" "}
-          {money(totals.actual)}
+          {t.noEstimate(totals.unknown)} · {t.actual} {money(totals.actual)}
         </p>
-        <p>האומדן וההוצאות מוצגים בנפרד. אומדנים אינם הצעת מחיר.</p>
+        <p>{t.disclaimer}</p>
         {!!plan.expenses.length && (
           <ul>
             {plan.expenses.map((e) => {
               const payer = plan.metadata.travelersList.find(
-                (t) => t.id === e.paidBy,
+                (v) => v.id === e.paidBy,
               );
               return (
                 <li key={e.id}>
                   {e.label}: {money(e.amountIls)}
                   {e.currency !== "ILS" ? ` (${e.amount} ${e.currency})` : ""}
-                  {payer ? ` · שילם/ה ${payer.name}` : ""}
+                  {payer ? ` · ${words.budget.paidBy(payer.name)}` : ""}
                 </li>
               );
             })}
@@ -135,15 +136,15 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
         )}
         {settleUp(balances(plan)).length > 0 && (
           <>
-            <h3>התחשבנות</h3>
+            <h3>{words.budget.settleUp}</h3>
             <ul>
-              {settleUp(balances(plan)).map((t, i) => {
+              {settleUp(balances(plan)).map((x, i) => {
                 const name = (id: string) =>
                   plan.metadata.travelersList.find((v) => v.id === id)?.name ||
                   id;
                 return (
                   <li key={i}>
-                    {name(t.from)} מעביר/ה ל{name(t.to)} {money(t.amount)}
+                    {t.transfer(name(x.from), name(x.to), money(x.amount))}
                   </li>
                 );
               })}
@@ -153,7 +154,7 @@ export function PrintTrip({ plan }: { plan: TripPlan }) {
       </section>
       {plan.notes && (
         <section>
-          <h2>הערות לדרך</h2>
+          <h2>{t.notes}</h2>
           <p className="print-notes">{plan.notes}</p>
         </section>
       )}

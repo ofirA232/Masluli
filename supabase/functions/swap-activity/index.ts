@@ -1,5 +1,5 @@
 import { handler, userId, quota, textInput } from "../_shared/http.ts";
-import { activity, callAi } from "../_shared/ai.ts";
+import { activity, callAi, tripLanguage } from "../_shared/ai.ts";
 import { preferences } from "../_shared/profile.ts";
 Deno.serve((req) =>
   handler(req, async (body) => {
@@ -15,6 +15,8 @@ Deno.serve((req) =>
       interests: Array.isArray(body.interests)
         ? body.interests.slice(0, 10).map((v) => textInput(v, 50))
         : [],
+      // The replacement is written in the trip's language.
+      language: tripLanguage(body),
     };
     return activity(
       await callAi(

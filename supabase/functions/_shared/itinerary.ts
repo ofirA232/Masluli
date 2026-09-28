@@ -50,6 +50,8 @@ export async function generateDays(
   traveler_profile: unknown,
   tripId?: string,
 ) {
+  // input carries the trip's language, so the route and every day are
+  // written in it.
   const data = { ...input, traveler_profile };
   const route =
     input.days > 1 ? await planRoute(input, data, tripId) : null;
@@ -68,7 +70,10 @@ export async function generateDays(
         day.activities.length < 1 ||
         day.activities.length > 10
       )
-        throw new ApiError(502, "התקבל מסלול חלקי. אפשר לנסות שוב.");
+        throw new ApiError(502, {
+          he: "התקבל מסלול חלקי. אפשר לנסות שוב.",
+          en: "Only part of the itinerary came back. Please try again.",
+        });
       return {
         day_number: n,
         activities: day.activities.map((v: unknown) =>
