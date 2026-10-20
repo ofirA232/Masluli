@@ -114,6 +114,42 @@ test("AI generation renders before optional provider enrichment", async ({
     .poll(() => state.row.trip_data.days[0].activities[0]?.source)
     .toBe("ai");
 });
+test("a plan still arrives when the traveller leaves the tab while it is written", async ({
+  page,
+}) => {
+  await setup(page);
+  // The AI takes a while; travellers switch tabs meanwhile. Coming back makes
+  // Supabase announce the same session again (SIGNED_IN), which must not
+  // reload the trip and drop the plan on its way.
+  let release = () => {};
+  const answer = new Promise<void>((resolve) => (release = resolve));
+  let asked = () => {};
+  const writing = new Promise<void>((resolve) => (asked = resolve));
+  await page.route("**/functions/v1/generate-itinerary**", async (route) => {
+    asked();
+    await answer;
+    await route.fallback();
+  });
+  await page.goto("/trip/new");
+  await page.locator("[name=destination]").fill("פריז");
+  await setDates(page, "2027-10-04", "2027-10-04");
+  await page.getByRole("button", { name: "יוצרים את הטיול שלי" }).click();
+  await writing;
+  for (const state of ["hidden", "visible"])
+    await page.evaluate((state) => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => state,
+      });
+      document.dispatchEvent(
+        new Event("visibilitychange", { bubbles: true }),
+      );
+    }, state);
+  // Let the reload that used to follow happen before the plan comes back.
+  await page.waitForTimeout(500);
+  release();
+  await expect(page.locator(".activity-title")).toHaveText("הצעת AI ליום 1");
+});
 test("AI stops link through the free search, paying only for a miss", async ({
   page,
 }) => {
