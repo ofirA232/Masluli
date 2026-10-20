@@ -29,6 +29,11 @@ export default function Trip() {
     if (generate) setCover("composing");
   }, [generate, setCover]);
   const shareToken = params.get("share_token") || undefined;
+  // Supabase announces the same session again whenever the tab comes back
+  // into view, with a new user object. Reloading then would unmount the
+  // workspace and silently drop a plan the AI is still writing, so the trip
+  // reloads only when the person signed in changes.
+  const userId = user?.id;
   const [record, setRecord] = useState<TripRecord | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(false);
@@ -41,7 +46,7 @@ export default function Trip() {
     const load = async () => {
       try {
         let found: TripRecord | null = null;
-        if (user) {
+        if (userId) {
           const { data, error } = await supabase
             .from("trips")
             .select("*")
@@ -69,7 +74,7 @@ export default function Trip() {
     return () => {
       active = false;
     };
-  }, [id, shareToken, user, authLoading]);
+  }, [id, shareToken, userId, authLoading]);
   // A trip that cannot be opened takes the cover down with it.
   useEffect(() => {
     if (!loading && !record) setCover(null);
